@@ -104,6 +104,16 @@ def create_app():
             {"name": "EventLync API", "status": "running", "version": "1.0.0"}
         )
 
+    # Add CORS preflight handler
+    @app.route('/api/<path:path>', methods=['OPTIONS'])
+    def options_handler(path):
+        return '', 200, {
+            'Access-Control-Allow-Origin': ', '.join(app.config['CORS_ORIGINS']),
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true'
+        }
+
     # Error handlers
     @app.errorhandler(404)
     def not_found(error):
