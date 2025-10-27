@@ -29,7 +29,17 @@ def create_app():
         default_limits=["200 per day", "50 per hour"],
         storage_uri="memory://",
     )
-    CORS(app, supports_credentials=True, origins=app.config["CORS_ORIGINS"])
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": app.config["CORS_ORIGINS"],
+                "supports_credentials": True,
+                "allow_headers": ["Content-Type", "Authorization"],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+            }
+        }
+    )
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -111,5 +121,11 @@ def create_app():
     @app.get("/health")
     def health_alias():
         return {"status": "ok"}, 200
+
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', ', '.join(app.config['CORS_ORIGINS']))
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
     return app

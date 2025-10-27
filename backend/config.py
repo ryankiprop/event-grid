@@ -52,7 +52,12 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "noreply@eventlync.com")
 
     # Frontend Configuration
-    FRONTEND_URL = os.getenv("FRONTEND_URL", "https://event-grid-gilt.vercel.app/")
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "https://event-grid-gilt.vercel.app")
+
+    # CORS Configuration
+    CORS_ORIGINS = [FRONTEND_URL]
+    if os.getenv("CORS_ORIGINS"):
+        CORS_ORIGINS.extend([origin.strip() for origin in os.getenv("CORS_ORIGINS").split(",") if origin.strip()])
 
     # File Uploads
     UPLOAD_FOLDER = os.path.join(
@@ -60,13 +65,6 @@ class Config:
     )
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max upload size
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
-
-    # CORS Configuration
-    cors_origins_str = os.getenv("CORS_ORIGINS")
-    if not cors_origins_str:
-        CORS_ORIGINS = [FRONTEND_URL]
-    else:
-        CORS_ORIGINS = [origin.strip() for origin in cors_origins_str.split(",")]
 
     # Session Configuration
     SESSION_COOKIE_SECURE = os.getenv("FLASK_ENV") == "production"
