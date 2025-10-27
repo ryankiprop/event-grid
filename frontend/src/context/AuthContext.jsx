@@ -1,6 +1,11 @@
 /* global localStorage */
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState
+} from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginRequest, registerRequest, registerOrganizerRequest, setAuthToken } from '../services/auth'
 
