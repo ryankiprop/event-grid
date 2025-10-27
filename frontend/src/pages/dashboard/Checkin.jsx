@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../../services/api'
 
-export default function Checkin() {
+export default function Checkin () {
   const { id } = useParams()
   const [code, setCode] = useState('')
   const [result, setResult] = useState(null)
@@ -115,42 +115,48 @@ export default function Checkin() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-4">
-      <div className="mb-4"><Link to={`/dashboard/my-events`} className="text-primary-600">← Back to My Events</Link></div>
-      <h1 className="text-2xl font-semibold mb-4">Check-in</h1>
-      <form onSubmit={onVerify} className="flex items-center gap-2 mb-4">
-        <input className="flex-1 border rounded px-3 py-2" placeholder="Scan or paste code" value={code} onChange={e => setCode(e.target.value)} />
-        <button type="submit" disabled={loading || !code.trim()} className="bg-primary-600 text-white px-4 py-2 rounded">{loading ? 'Verifying...' : 'Verify'}</button>
+    <div className='max-w-3xl mx-auto p-4'>
+      <div className='mb-4'><Link to='/dashboard/my-events' className='text-primary-600'>← Back to My Events</Link></div>
+      <h1 className='text-2xl font-semibold mb-4'>Check-in</h1>
+      <form onSubmit={onVerify} className='flex items-center gap-2 mb-4'>
+        <input className='flex-1 border rounded px-3 py-2' placeholder='Scan or paste code' value={code} onChange={e => setCode(e.target.value)} />
+        <button type='submit' disabled={loading || !code.trim()} className='bg-primary-600 text-white px-4 py-2 rounded'>{loading ? 'Verifying...' : 'Verify'}</button>
       </form>
-      <div className="mb-3 flex items-center gap-2">
-        {!scanning ? (
-          <button onClick={startScan} className="px-3 py-2 border rounded">Use Camera</button>
-        ) : (
-          <button onClick={stopScan} className="px-3 py-2 border rounded">Stop Camera</button>
-        )}
+      <div className='mb-3 flex items-center gap-2'>
+        {!scanning
+          ? (
+            <button onClick={startScan} className='px-3 py-2 border rounded'>Use Camera</button>
+            )
+          : (
+            <button onClick={stopScan} className='px-3 py-2 border rounded'>Stop Camera</button>
+            )}
       </div>
-      <div id="qr-region" className="w-full max-w-md aspect-square bg-black/10 rounded mb-4"></div>
-      {error && <div className="text-red-600 mb-2">{error}</div>}
+      <div id='qr-region' className='w-full max-w-md aspect-square bg-black/10 rounded mb-4' />
+      {error && <div className='text-red-600 mb-2'>{error}</div>}
       {result && (
-        <div className="bg-white border rounded p-4">
-          {result.valid ? (
-            <div>
-              <div className="text-green-700 font-semibold mb-2">Valid ticket</div>
-              <div className="text-sm text-gray-700">Order: {result.order.id}</div>
-              <div className="text-sm text-gray-700">Buyer: {result.order.user_id}</div>
-              <div className="text-sm text-gray-700">Ticket Type: {result.order_item.ticket_type_id}</div>
-              <div className="text-sm text-gray-700">Quantity: {result.order_item.quantity}</div>
-              {result.order_item.checked_in ? (
-                <div className="mt-2 text-sm text-gray-700">Already used at {result.order_item.checked_in_at || 'unknown time'}</div>
-              ) : (
-                <div className="mt-3">
-                  <button onClick={markUsed} disabled={loading} className="px-3 py-2 bg-primary-600 text-white rounded">{loading ? 'Marking...' : 'Mark as used'}</button>
-                </div>
+        <div className='bg-white border rounded p-4'>
+          {result.valid
+            ? (
+              <div>
+                <div className='text-green-700 font-semibold mb-2'>Valid ticket</div>
+                <div className='text-sm text-gray-700'>Order: {result.order.id}</div>
+                <div className='text-sm text-gray-700'>Buyer: {result.order.user_id}</div>
+                <div className='text-sm text-gray-700'>Ticket Type: {result.order_item.ticket_type_id}</div>
+                <div className='text-sm text-gray-700'>Quantity: {result.order_item.quantity}</div>
+                {result.order_item.checked_in
+                  ? (
+                    <div className='mt-2 text-sm text-gray-700'>Already used at {result.order_item.checked_in_at || 'unknown time'}</div>
+                    )
+                  : (
+                    <div className='mt-3'>
+                      <button onClick={markUsed} disabled={loading} className='px-3 py-2 bg-primary-600 text-white rounded'>{loading ? 'Marking...' : 'Mark as used'}</button>
+                    </div>
+                    )}
+              </div>
+              )
+            : (
+              <div className='text-red-700 font-semibold'>Invalid ticket: {result.message}</div>
               )}
-            </div>
-          ) : (
-            <div className="text-red-700 font-semibold">Invalid ticket: {result.message}</div>
-          )}
         </div>
       )}
     </div>
