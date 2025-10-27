@@ -11,14 +11,7 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key"
 
     # Database configuration for Neon PostgreSQL
-    @property
-    def SQLALCHEMY_DATABASE_URI(self):
-        database_url = os.environ.get("DATABASE_URL")
-        if database_url:
-            return database_url
-
-        # Use standard PostgreSQL URL format - SQLAlchemy will auto-detect the best driver
-        return "postgresql://neondb_owner:npg_oVhL5pN9BblI@ep-withered-resonance-adm7679h-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or "postgresql://neondb_owner:npg_oVhL5pN9BblI@ep-withered-resonance-adm7679h-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
