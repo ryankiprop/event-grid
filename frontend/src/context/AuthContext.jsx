@@ -1,7 +1,8 @@
+/* global localStorage */
+
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginRequest, registerRequest, registerOrganizerRequest, setAuthToken } from '../services/auth'
-import api from '../services/api'
 
 const AuthContext = createContext()
 
@@ -11,7 +12,7 @@ export const useAuth = () => {
   return ctx
 }
 
-export function AuthProvider({ children }) {
+export function AuthProvider ({ children }) {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(null)
   const navigate = useNavigate()

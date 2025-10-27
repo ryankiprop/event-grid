@@ -1,10 +1,10 @@
 import api from './api'
 
-export const fetchEvents = async ({ q = '', page = 1, per_page = 10, mine = false } = {}) => {
+export const fetchEvents = async ({ q = '', page = 1, perPage = 10, mine = false } = {}) => {
   const params = {}
   if (q) params.q = q
   if (page) params.page = page
-  if (per_page) params.per_page = per_page
+  if (perPage) params.per_page = perPage
   if (mine) params.mine = true
   const res = await api.get('/events', { params })
   return res.data

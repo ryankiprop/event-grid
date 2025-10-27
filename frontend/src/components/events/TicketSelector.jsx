@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getEventTickets } from '../../services/tickets'
 
-export default function TicketSelector({ eventId, onChange }) {
+export default function TicketSelector ({ eventId, onChange }) {
   const [tickets, setTickets] = useState([])
   const [quantities, setQuantities] = useState({})
   const [loading, setLoading] = useState(true)
@@ -28,7 +28,7 @@ export default function TicketSelector({ eventId, onChange }) {
   useEffect(() => {
     const items = Object.entries(quantities)
       .filter(([, q]) => q > 0)
-      .map(([ticket_type_id, quantity]) => ({ ticket_type_id, quantity }))
+      .map(([ticketTypeId, quantity]) => ({ ticketTypeId, quantity }))
     onChange?.(items, tickets)
   }, [quantities, onChange, tickets])
 
@@ -37,21 +37,21 @@ export default function TicketSelector({ eventId, onChange }) {
   }
 
   if (loading) return <div>Loading tickets...</div>
-  if (error) return <div className="text-red-600">{error}</div>
+  if (error) return <div className='text-red-600'>{error}</div>
   if (!tickets.length) return <div>No ticket types available.</div>
 
   return (
-    <div className="space-y-3">
+    <div className='space-y-3'>
       {tickets.map(t => (
-        <div key={t.id} className="flex items-center justify-between border rounded p-3">
+        <div key={t.id} className='flex items-center justify-between border rounded p-3'>
           <div>
-            <div className="font-medium">{t.name}</div>
-            <div className="text-sm text-gray-600">${(t.price||0)/100} • {t.quantity_total - (t.quantity_sold||0)} left</div>
+            <div className='font-medium'>{t.name}</div>
+            <div className='text-sm text-gray-600'>${(t.price || 0) / 100} • {t.quantity_total - (t.quantity_sold || 0)} left</div>
           </div>
-          <div className="flex items-center gap-2">
-            <button type="button" className="px-2 py-1 border rounded" onClick={() => updateQty(t.id, -1)}>-</button>
+          <div className='flex items-center gap-2'>
+            <button type='button' className='px-2 py-1 border rounded' onClick={() => updateQty(t.id, -1)}>-</button>
             <span>{quantities[t.id] || 0}</span>
-            <button type="button" className="px-2 py-1 border rounded" onClick={() => updateQty(t.id, 1)}>+</button>
+            <button type='button' className='px-2 py-1 border rounded' onClick={() => updateQty(t.id, 1)}>+</button>
           </div>
         </div>
       ))}
