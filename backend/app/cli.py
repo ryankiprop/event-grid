@@ -1,12 +1,13 @@
-import click
 from datetime import datetime, timedelta
 from uuid import UUID
 
+import click
+
 from .extensions import db
-from .models.user import User
 from .models.event import Event
-from .models.ticket import TicketType
 from .models.order import Order, OrderItem
+from .models.ticket import TicketType
+from .models.user import User
 from .utils.auth import hash_password
 
 
@@ -90,16 +91,28 @@ def register_cli(app):
         """Seed database with demo users, events, tickets, and an order."""
         click.echo("Seeding database with demo data...")
         # Users
-        admin = _get_or_create_user("admin@example.com", "admin", "Admin", "User", "password123")
-        organizer = _get_or_create_user("organizer@example.com", "organizer", "Olivia", "Organizer", "password123")
-        customer = _get_or_create_user("user@example.com", "user", "Charlie", "Customer", "password123")
+        admin = _get_or_create_user(
+            "admin@example.com", "admin", "Admin", "User", "password123"
+        )
+        organizer = _get_or_create_user(
+            "organizer@example.com", "organizer", "Olivia", "Organizer", "password123"
+        )
+        customer = _get_or_create_user(
+            "user@example.com", "user", "Charlie", "Customer", "password123"
+        )
 
         # Events created by organizer
-        ev1 = _create_event(organizer, "Eventgrid Launch Conference", days_from_now=7, published=True)
-        ev2 = _create_event(organizer, "Tech Meetup Night", days_from_now=14, published=False)
+        ev1 = _create_event(
+            organizer, "Eventgrid Launch Conference", days_from_now=7, published=True
+        )
+        ev2 = _create_event(
+            organizer, "Tech Meetup Night", days_from_now=14, published=False
+        )
 
         # Ticket types
-        t1, t2 = _create_tickets(ev1, [("General Admission", 2500, 100), ("VIP", 7500, 20)])
+        t1, t2 = _create_tickets(
+            ev1, [("General Admission", 2500, 100), ("VIP", 7500, 20)]
+        )
         _create_tickets(ev2, [("Standard", 1500, 50)])
 
         # Sample order by customer for ev1

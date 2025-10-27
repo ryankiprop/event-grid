@@ -14,7 +14,9 @@ class UserSchema(Schema):
 
 class UserCreateSchema(Schema):
     email = fields.Email(required=True)
-    password = fields.Str(required=True, load_only=True, validate=validate.Length(min=6))
+    password = fields.Str(
+        required=True, load_only=True, validate=validate.Length(min=6)
+    )
     first_name = fields.Str(required=False)
     last_name = fields.Str(required=False)
 
