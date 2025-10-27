@@ -1,8 +1,8 @@
-import os
+import os  # noqa: F401
 import sys
 
 from app import create_app, db
-from app.models import Event, Order, OrderItem, Payment, TicketType, User
+from app.models import Event, Order, OrderItem, Payment, TicketType, User  # noqa: F401
 
 
 def init_db():

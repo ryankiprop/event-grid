@@ -1,11 +1,11 @@
-import os
+import os  # noqa: F401
 import sys
 
 from app import create_app, db
-from app.models.event import Event
-from app.models.order import Order, OrderItem
-from app.models.ticket import TicketType
-from app.models.user import User
+from app.models.event import Event  # noqa: F401
+from app.models.order import Order, OrderItem  # noqa: F401
+from app.models.ticket import TicketType  # noqa: F401
+from app.models.user import User  # noqa: F401
 
 
 def setup_database():
