@@ -11,10 +11,14 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key"
 
     # Database configuration for Neon PostgreSQL
-    SQLALCHEMY_DATABASE_URI = (
-        os.environ.get("DATABASE_URL")
-        or "postgresql+psycopg://neondb_owner:npg_oVhL5pN9BblI@ep-withered-resonance-adm7679h-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
-    )
+    @property
+    def SQLALCHEMY_DATABASE_URI(self):
+        database_url = os.environ.get("DATABASE_URL")
+        if database_url:
+            return database_url
+
+        # Use standard PostgreSQL URL format - SQLAlchemy will auto-detect the best driver
+        return "postgresql://neondb_owner:npg_oVhL5pN9BblI@ep-withered-resonance-adm7679h-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
@@ -32,6 +36,9 @@ class Config:
             "keepalives_interval": 10,
             "keepalives_count": 5,
         },
+        "future": True,  # Use SQLAlchemy 2.0 style
+        "echo": False,  # Set to True for SQL debugging
+        "poolclass": None,  # Let SQLAlchemy choose the best pool
     }
 
     # JWT Configuration
