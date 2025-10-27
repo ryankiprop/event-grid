@@ -1,11 +1,13 @@
+from uuid import UUID as _UUID
+
 from flask import request
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from flask_restful import Resource
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+
 from ..extensions import db
 from ..models import User
-from ..schemas import UserSchema, UserCreateSchema, UserLoginSchema
-from ..utils.auth import hash_password, check_password
-from uuid import UUID as _UUID
+from ..schemas import UserCreateSchema, UserLoginSchema, UserSchema
+from ..utils.auth import check_password, hash_password
 
 user_schema = UserSchema()
 user_create_schema = UserCreateSchema()
@@ -34,7 +36,9 @@ class RegisterResource(Resource):
         db.session.add(user)
         db.session.commit()
 
-        token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
+        token = create_access_token(
+            identity=str(user.id), additional_claims={"role": user.role}
+        )
         return {"token": token, "user": user_schema.dump(user)}, 201
 
 
@@ -52,7 +56,9 @@ class LoginResource(Resource):
         if not user or not check_password(password, user.password_hash):
             return {"message": "Invalid credentials"}, 401
 
-        token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
+        token = create_access_token(
+            identity=str(user.id), additional_claims={"role": user.role}
+        )
         return {"token": token, "user": user_schema.dump(user)}, 200
 
 
@@ -92,5 +98,7 @@ class RegisterOrganizerResource(Resource):
         db.session.add(user)
         db.session.commit()
 
-        token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
+        token = create_access_token(
+            identity=str(user.id), additional_claims={"role": user.role}
+        )
         return {"token": token, "user": user_schema.dump(user)}, 201

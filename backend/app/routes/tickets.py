@@ -1,11 +1,16 @@
 from uuid import UUID as _UUID
+
 from flask import request
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from flask_restful import Resource
-from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
+
 from ..extensions import db
 from ..models import Event, TicketType
-from ..schemas.ticket_schema import TicketTypeSchema, TicketTypeCreateSchema, TicketTypeUpdateSchema
-
+from ..schemas.ticket_schema import (
+    TicketTypeCreateSchema,
+    TicketTypeSchema,
+    TicketTypeUpdateSchema,
+)
 
 ticket_schema = TicketTypeSchema()
 tickets_schema = TicketTypeSchema(many=True)
@@ -39,9 +44,9 @@ class EventTicketsResource(Resource):
         if not event:
             return {"message": "Event not found"}, 404
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _uuid(get_jwt_identity())
-        if role != 'admin' and (not uid or event.organizer_id != uid):
+        if role != "admin" and (not uid or event.organizer_id != uid):
             return {"message": "Forbidden"}, 403
         json_data = request.get_json() or {}
         errors = ticket_create_schema.validate(json_data)
@@ -49,9 +54,9 @@ class EventTicketsResource(Resource):
             return {"errors": errors}, 400
         tt = TicketType(
             event_id=event.id,
-            name=json_data['name'],
-            price=int(json_data['price']),
-            quantity_total=int(json_data['quantity_total']),
+            name=json_data["name"],
+            price=int(json_data["price"]),
+            quantity_total=int(json_data["quantity_total"]),
         )
         db.session.add(tt)
         db.session.commit()
@@ -69,9 +74,9 @@ class TicketTypeResource(Resource):
         if not event:
             return {"message": "Event not found"}, 404
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _uuid(get_jwt_identity())
-        if role != 'admin' and (not uid or event.organizer_id != uid):
+        if role != "admin" and (not uid or event.organizer_id != uid):
             return {"message": "Forbidden"}, 403
         tt = TicketType.query.get(tid)
         if not tt or tt.event_id != event.id:
@@ -96,9 +101,9 @@ class TicketTypeResource(Resource):
         if not event:
             return {"message": "Event not found"}, 404
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _uuid(get_jwt_identity())
-        if role != 'admin' and (not uid or event.organizer_id != uid):
+        if role != "admin" and (not uid or event.organizer_id != uid):
             return {"message": "Forbidden"}, 403
         tt = TicketType.query.get(tid)
         if not tt or tt.event_id != event.id:

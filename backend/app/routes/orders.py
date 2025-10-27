@@ -1,20 +1,22 @@
 import os
-from uuid import UUID as _UUID
 from datetime import datetime
+from uuid import UUID as _UUID
+
 from flask import request
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from flask_restful import Resource
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from ..extensions import db
-from ..models import Event, TicketType, Order, OrderItem, User
 from sqlalchemy.orm import joinedload
-from ..schemas.order_schema import OrderSchema, CreateOrderSchema
+
+from ..extensions import db
+from ..models import Event, Order, OrderItem, TicketType, User
+from ..schemas.order_schema import CreateOrderSchema, OrderSchema
 from ..utils.email import send_order_confirmation
 from ..utils.qrcode_util import generate_ticket_qr
 
 order_schema = OrderSchema()
 orders_schema = OrderSchema(many=True)
 create_order_schema = CreateOrderSchema()
-FREE_MODE = (os.getenv('FREE_MODE') or '').lower() in ('1', 'true', 'yes')
+FREE_MODE = (os.getenv("FREE_MODE") or "").lower() in ("1", "true", "yes")
 
 
 def _uuid(v):
@@ -28,7 +30,9 @@ class OrdersResource(Resource):
     @jwt_required()
     def post(self):
         if not FREE_MODE:
-            return {"message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."}, 400
+            return {
+                "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
+            }, 400
         json_data = request.get_json() or {}
         errors = create_order_schema.validate(json_data)
         if errors:
@@ -36,21 +40,21 @@ class OrdersResource(Resource):
         user_id = _uuid(get_jwt_identity())
         if not user_id:
             return {"message": "Invalid token"}, 400
-        event_id = _uuid(json_data.get('event_id'))
+        event_id = _uuid(json_data.get("event_id"))
         if not event_id:
             return {"message": "Invalid event id"}, 400
         event = Event.query.get(event_id)
         if not event:
             return {"message": "Event not found"}, 404
         # Build order
-        order = Order(user_id=user_id, event_id=event.id, total_amount=0, status='paid')
+        order = Order(user_id=user_id, event_id=event.id, total_amount=0, status="paid")
         db.session.add(order)
         db.session.flush()  # get order.id
         total = 0
         # Validate and reserve tickets
-        for item in json_data.get('items', []):
-            tt_id = _uuid(item.get('ticket_type_id'))
-            qty = int(item.get('quantity') or 0)
+        for item in json_data.get("items", []):
+            tt_id = _uuid(item.get("ticket_type_id"))
+            qty = int(item.get("quantity") or 0)
             if not tt_id or qty <= 0:
                 db.session.rollback()
                 return {"message": "Invalid ticket item"}, 400
@@ -63,7 +67,12 @@ class OrdersResource(Resource):
                 return {"message": f"Insufficient availability for {tt.name}"}, 400
             line_total = tt.price * qty
             total += line_total
-            oi = OrderItem(order_id=order.id, ticket_type_id=tt.id, quantity=qty, unit_price=tt.price)
+            oi = OrderItem(
+                order_id=order.id,
+                ticket_type_id=tt.id,
+                quantity=qty,
+                unit_price=tt.price,
+            )
             db.session.add(oi)
             db.session.flush()  # get oi.id
             oi.qr_code = generate_ticket_qr(order.id, oi.id, user_id)
@@ -99,9 +108,9 @@ class OrderDetailResource(Resource):
         if not order:
             return {"message": "Not found"}, 404
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         user_id = _uuid(get_jwt_identity())
-        if role != 'admin' and (not user_id or order.user_id != user_id):
+        if role != "admin" and (not user_id or order.user_id != user_id):
             return {"message": "Forbidden"}, 403
         return {"order": order_schema.dump(order)}, 200
 
@@ -116,9 +125,9 @@ class EventOrdersResource(Resource):
         if not event:
             return {"message": "Event not found"}, 404
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _uuid(get_jwt_identity())
-        if role != 'admin' and (not uid or event.organizer_id != uid):
+        if role != "admin" and (not uid or event.organizer_id != uid):
             return {"message": "Forbidden"}, 403
         qs = Order.query.filter_by(event_id=event.id).order_by(Order.created_at.desc())
         return {"orders": orders_schema.dump(qs.all())}, 200
@@ -128,23 +137,22 @@ class VerifyCheckinResource(Resource):
     @jwt_required()
     def post(self):
         json_data = request.get_json() or {}
-        event_id = _uuid(json_data.get('event_id'))
-        code = (json_data.get('code') or '').strip()
+        event_id = _uuid(json_data.get("event_id"))
+        code = (json_data.get("code") or "").strip()
         if not event_id or not code:
             return {"valid": False, "message": "Missing event_id or code"}, 400
 
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _uuid(get_jwt_identity())
 
         # Only organizers/admins can check in for their events
-        if role not in ('organizer', 'admin'):
+        if role not in ("organizer", "admin"):
             return {"valid": False, "message": "Forbidden"}, 403
 
         # Find order item with matching QR code for this event
         oi = (
-            OrderItem.query
-            .join(Order)
+            OrderItem.query.join(Order)
             .filter(Order.event_id == event_id)
             .filter(OrderItem.qr_code == code)
             .first()
@@ -154,7 +162,7 @@ class VerifyCheckinResource(Resource):
             return {"valid": False, "message": "Invalid code"}, 404
 
         # Check if user has permission for this event
-        if role == 'organizer' and oi.order.event.organizer_id != uid:
+        if role == "organizer" and oi.order.event.organizer_id != uid:
             return {"valid": False, "message": "Forbidden"}, 403
 
         return {
@@ -164,7 +172,9 @@ class VerifyCheckinResource(Resource):
                 "user_id": str(oi.order.user_id),
                 "total_amount": oi.order.total_amount,
                 "status": oi.order.status,
-                "created_at": oi.order.created_at.isoformat() if oi.order.created_at else None,
+                "created_at": (
+                    oi.order.created_at.isoformat() if oi.order.created_at else None
+                ),
             },
             "order_item": {
                 "id": str(oi.id),
@@ -173,9 +183,11 @@ class VerifyCheckinResource(Resource):
                 "unit_price": oi.unit_price,
                 "qr_code": oi.qr_code,
                 "checked_in": bool(oi.checked_in),
-                "checked_in_at": oi.checked_in_at.isoformat() if oi.checked_in_at else None,
+                "checked_in_at": (
+                    oi.checked_in_at.isoformat() if oi.checked_in_at else None
+                ),
                 "checked_in_by": str(oi.checked_in_by) if oi.checked_in_by else None,
-            }
+            },
         }, 200
 
 
@@ -183,23 +195,22 @@ class MarkCheckinResource(Resource):
     @jwt_required()
     def post(self):
         json_data = request.get_json() or {}
-        event_id = _uuid(json_data.get('event_id'))
-        code = (json_data.get('code') or '').strip()
+        event_id = _uuid(json_data.get("event_id"))
+        code = (json_data.get("code") or "").strip()
         if not event_id or not code:
             return {"message": "Missing event_id or code"}, 400
 
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _uuid(get_jwt_identity())
 
         # Only organizers/admins can check in for their events
-        if role not in ('organizer', 'admin'):
+        if role not in ("organizer", "admin"):
             return {"message": "Forbidden"}, 403
 
         # Find order item with matching QR code for this event
         oi = (
-            OrderItem.query
-            .join(Order)
+            OrderItem.query.join(Order)
             .filter(Order.event_id == event_id)
             .filter(OrderItem.qr_code == code)
             .first()
@@ -209,7 +220,7 @@ class MarkCheckinResource(Resource):
             return {"message": "Invalid code"}, 404
 
         # Check if user has permission for this event
-        if role == 'organizer' and oi.order.event.organizer_id != uid:
+        if role == "organizer" and oi.order.event.organizer_id != uid:
             return {"message": "Forbidden"}, 403
 
         if oi.checked_in:
@@ -225,7 +236,9 @@ class MarkCheckinResource(Resource):
             "order_item": {
                 "id": str(oi.id),
                 "checked_in": True,
-                "checked_in_at": oi.checked_in_at.isoformat() if oi.checked_in_at else None,
+                "checked_in_at": (
+                    oi.checked_in_at.isoformat() if oi.checked_in_at else None
+                ),
                 "checked_in_by": str(oi.checked_in_by) if oi.checked_in_by else None,
-            }
+            },
         }, 200
