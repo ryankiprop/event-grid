@@ -53,11 +53,11 @@ class Config:
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
     
     # CORS Configuration
-    CORS_ORIGINS = os.getenv('CORS_ORIGINS')
-    if not CORS_ORIGINS:
+    cors_origins_str = os.getenv('CORS_ORIGINS')
+    if not cors_origins_str:
         CORS_ORIGINS = [FRONTEND_URL]
     else:
-        CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS.split(',')]
+        CORS_ORIGINS = [origin.strip() for origin in cors_origins_str.split(',')]
     
     # Session Configuration
     SESSION_COOKIE_SECURE = os.getenv('FLASK_ENV') == 'production'
