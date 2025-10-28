@@ -132,10 +132,4 @@ def create_app():
     def health_alias():
         return {"status": "ok"}, 200
 
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', ', '.join(app.config['CORS_ORIGINS']))
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
     return app

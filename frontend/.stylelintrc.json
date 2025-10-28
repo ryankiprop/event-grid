@@ -8,8 +8,8 @@
       {
         "ignoreAtRules": [
           "tailwind",
-          "@tailwind",
-          "@apply"
+          "apply",
+          "layer"
         ]
       }
     ]

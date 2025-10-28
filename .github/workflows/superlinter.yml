@@ -1,5 +1,5 @@
 ---
-name: Super_Linter
+name: Super-Linter
 
 on: push
 

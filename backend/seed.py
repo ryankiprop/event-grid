@@ -1,11 +1,12 @@
 """Database seeding script"""
 import sys
 from datetime import datetime, timedelta
+
 from werkzeug.security import generate_password_hash
 
 from app import create_app
-from app.models import User, Event, TicketType, Order, Payment
 from app.extensions import db
+from app.models import Event, Order, Payment, TicketType, User
 
 def seed_data():
     app = create_app()
