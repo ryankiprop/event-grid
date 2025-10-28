@@ -56,8 +56,11 @@ class Config:
 
     # CORS Configuration
     CORS_ORIGINS = [FRONTEND_URL]
-    if os.getenv("CORS_ORIGINS"):
-        CORS_ORIGINS.extend([origin.strip() for origin in os.getenv("CORS_ORIGINS").split(",") if origin.strip()])
+    _extra_origins = os.getenv("CORS_ORIGINS")
+    if _extra_origins:
+        CORS_ORIGINS.extend(
+            [origin.strip() for origin in _extra_origins.split(",") if origin.strip()]
+        )
 
     # File Uploads
     UPLOAD_FOLDER = os.path.join(
