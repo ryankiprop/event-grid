@@ -73,7 +73,33 @@ class MeResource(Resource):
         user = User.query.get(user_uuid)
         if not user:
             return {"message": "User not found"}, 404
-        return {"user": user_schema.dump(user)}, 200
+        return user_schema.dump(user), 200
+        
+    @jwt_required()
+    def put(self):
+        identity = get_jwt_identity()
+        try:
+            user_uuid = _UUID(str(identity))
+        except Exception:
+            return {"message": "Invalid token identity"}, 400
+            
+        user = User.query.get(user_uuid)
+        if not user:
+            return {"message": "User not found"}, 404
+            
+        json_data = request.get_json() or {}
+        
+        # Update allowed fields
+        if 'first_name' in json_data:
+            user.first_name = json_data['first_name']
+        if 'last_name' in json_data:
+            user.last_name = json_data['last_name']
+        if 'avatar_url' in json_data:
+            user.avatar_url = json_data['avatar_url']
+            
+        db.session.commit()
+        
+        return {"message": "Profile updated successfully", "user": user_schema.dump(user)}, 200
 
 
 class RegisterOrganizerResource(Resource):

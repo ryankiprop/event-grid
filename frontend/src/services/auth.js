@@ -18,6 +18,11 @@ export const registerOrganizerRequest = async (data) => {
   return res.data
 }
 
+export const updateProfile = async (data) => {
+  const res = await api.put('/auth/me', data)
+  return res.data.user
+}
+
 export const loginRequest = async (data) => {
   try {
     console.log('Attempting login with data:', data);
