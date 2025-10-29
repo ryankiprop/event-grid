@@ -4,9 +4,8 @@ import sys
 import uuid
 from datetime import datetime, timedelta
 
-from werkzeug.security import generate_password_hash
-
 from app import create_app, db
+from app.utils.auth import hash_password
 from app.models import Event, Order, OrderItem, Payment, TicketType, User
 
 def drop_tables():
@@ -29,7 +28,7 @@ def seed_data():
     # Create admin user
     admin = User(
         email="admin@eventgrid.com",
-        password_hash=generate_password_hash("Admin@123"),
+        password_hash=hash_password("Admin@123"),
         first_name="Admin",
         last_name="User",
         role="admin"
@@ -40,13 +39,13 @@ def seed_data():
     users = [
         User(
             email="user1@eventgrid.com",
-            password_hash=generate_password_hash("User@123"),
+            password_hash=hash_password("User@123"),
             first_name="John",
             last_name="Doe"
         ),
         User(
             email="user2@eventgrid.com",
-            password_hash=generate_password_hash("User@123"),
+            password_hash=hash_password("User@123"),
             first_name="Jane",
             last_name="Smith"
         )
@@ -57,14 +56,14 @@ def seed_data():
     organizers = [
         User(
             email="organizer@eventgrid.com",
-            password_hash=generate_password_hash("Organizer@123"),
+            password_hash=hash_password("Organizer@123"),
             first_name="Event",
             last_name="Organizer",
             role="organizer"
         ),
         User(
             email="events@nairobi.com",
-            password_hash=generate_password_hash("Organizer@123"),
+            password_hash=hash_password("Organizer@123"),
             first_name="Nairobi",
             last_name="Events",
             role="organizer"
