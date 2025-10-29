@@ -21,7 +21,11 @@ export default function Navbar () {
           )}
           {user && (
             <>
-              <Link to='/dashboard' className='text-sm hover:text-primary-700 transition'>Dashboard</Link>
+              {/* Show Dashboard only for organizers and admins */}
+              {(user.role === 'organizer' || user.role === 'admin') && (
+                <Link to='/dashboard' className='text-sm hover:text-primary-700 transition'>Dashboard</Link>
+              )}
+              
               {/* Role-based quick links */}
               {user.role === 'organizer' && (
                 <Link to='/dashboard/my-events' className='text-sm hover:text-primary-700 transition'>My Events</Link>
@@ -32,9 +36,8 @@ export default function Navbar () {
                   <Link to='/dashboard/manage-users' className='text-sm hover:text-primary-700 transition'>Manage Users</Link>
                 </>
               )}
-              {user.role === 'user' && (
-                <Link to='/dashboard/my-tickets' className='text-sm hover:text-primary-700 transition'>My Tickets</Link>
-              )}
+              {/* Show My Tickets for all logged-in users */}
+              <Link to='/dashboard/my-tickets' className='text-sm hover:text-primary-700 transition'>My Tickets</Link>
               <button onClick={logout} className='text-sm text-red-600 hover:text-red-700 transition'>Logout</button>
             </>
           )}

@@ -66,8 +66,6 @@ class MpesaInitiateResource(Resource):
                 unit_price=tt.price,
             )
             db.session.add(oi)
-            db.session.flush()
-            oi.qr_code = generate_ticket_qr(order.id, oi.id, user_id)
         order.total_amount = total
         db.session.flush()
 
@@ -104,7 +102,6 @@ class MpesaInitiateResource(Resource):
                     "amount_kes": amount_kes,
                     "checkout_request_id": payment.checkout_request_id,
                 },
-                "order": {"id": str(order.id)},
             }, 200
         except Exception as e:
             current_app.logger.exception("mpesa.initiate failed")
@@ -162,20 +159,21 @@ class MpesaCallbackResource(Resource):
         p.result_desc = result_desc
         if result_code == "0":
             p.status = "success"
-            # Mark order paid
+            # Mark order paid and generate QR codes now that payment succeeded
             order = Order.query.get(p.order_id)
             if order:
                 order.status = "paid"
-                # increment sold counts on success
                 try:
                     for oi in order.items:
+                        if not oi.qr_code:
+                            oi.qr_code = generate_ticket_qr(order.id, oi.id, order.user_id)
                         tt = TicketType.query.get(oi.ticket_type_id)
                         if tt:
                             tt.quantity_sold = (tt.quantity_sold or 0) + (
                                 oi.quantity or 0
                             )
                 except Exception:
-                    current_app.logger.exception("mpesa.callback increment sold failed")
+                    current_app.logger.exception("mpesa.callback ticket processing failed")
         else:
             p.status = "failed"
         db.session.commit()
