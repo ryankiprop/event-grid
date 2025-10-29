@@ -38,13 +38,27 @@ export function AuthProvider ({ children }) {
   }, [])
 
   const login = async (values) => {
-    const res = await loginRequest(values)
-    setToken(res.token)
-    setUser(res.user)
-    localStorage.setItem('token', res.token)
-    localStorage.setItem('user', JSON.stringify(res.user))
-    setAuthToken(res.token)
-    navigate('/')
+    try {
+      console.log('Starting login with values:', values);
+      const res = await loginRequest(values);
+      console.log('Login successful, response:', res);
+      
+      if (!res.token || !res.user) {
+        throw new Error('Invalid response from server: missing token or user data');
+      }
+      
+      setToken(res.token);
+      setUser(res.user);
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      setAuthToken(res.token);
+      console.log('Auth state updated, navigating to home...');
+      navigate('/');
+    } catch (error) {
+      console.error('Login failed:', error);
+      // Rethrow to be handled by the form
+      throw error;
+    }
   }
 
   const register = async (values) => {
