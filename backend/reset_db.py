@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime, timedelta
 
 from app import create_app, db
-from app.utils.auth import hash_password
 from app.models import Event, Order, OrderItem, Payment, TicketType, User
+from app.utils.auth import hash_password
 
 def drop_tables():
     """Drop all database tables"""

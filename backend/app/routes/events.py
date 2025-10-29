@@ -14,7 +14,11 @@ from ..extensions import db
 from ..models import Event
 from ..models.order import Order, OrderItem
 from ..models.ticket import TicketType
-from ..schemas.event_schema import EventCreateSchema, EventSchema, EventUpdateSchema
+from ..schemas.event_schema import (
+    EventCreateSchema,
+    EventSchema,
+    EventUpdateSchema,
+)
 from ..utils.pagination import get_pagination_params
 
 event_schema = EventSchema()

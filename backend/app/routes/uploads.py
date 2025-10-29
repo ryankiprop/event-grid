@@ -1,4 +1,4 @@
-from flask import request, current_app
+from flask import current_app, request
 from flask_jwt_extended import get_jwt, jwt_required
 from flask_restful import Resource
 

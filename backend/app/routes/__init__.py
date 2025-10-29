@@ -1,7 +1,12 @@
 from flask import Blueprint
 from flask_restful import Api
 
-from .auth import LoginResource, MeResource, RegisterOrganizerResource, RegisterResource
+from .auth import (
+    LoginResource,
+    MeResource,
+    RegisterOrganizerResource,
+    RegisterResource,
+)
 from .dashboard import AdminDashboardResource, OrganizerDashboardResource
 from .events import EventResource, EventsListResource, EventStatsResource
 from .orders import (
