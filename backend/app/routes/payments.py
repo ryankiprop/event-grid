@@ -166,14 +166,29 @@ class MpesaCallbackResource(Resource):
                 try:
                     for oi in order.items:
                         if not oi.qr_code:
-                            oi.qr_code = generate_ticket_qr(order.id, oi.id, order.user_id)
+                            current_app.logger.info(f"Generating QR code for order item {oi.id}")
+                            qr_code = generate_ticket_qr(order.id, oi.id, order.user_id)
+                            if not qr_code:
+                                current_app.logger.error(f"Failed to generate QR code for order item {oi.id}")
+                            else:
+                                oi.qr_code = qr_code
+                                current_app.logger.info(f"QR code generated for order item {oi.id}")
+                        
+                        # Update ticket type sold count
                         tt = TicketType.query.get(oi.ticket_type_id)
                         if tt:
-                            tt.quantity_sold = (tt.quantity_sold or 0) + (
-                                oi.quantity or 0
-                            )
-                except Exception:
-                    current_app.logger.exception("mpesa.callback ticket processing failed")
+                            tt.quantity_sold = (tt.quantity_sold or 0) + (oi.quantity or 0)
+                            current_app.logger.info(f"Updated quantity_sold for ticket type {tt.id} to {tt.quantity_sold}")
+                    
+                    # Commit after all updates
+                    db.session.commit()
+                    current_app.logger.info(f"Successfully processed payment for order {order.id}")
+                    
+                except Exception as e:
+                    current_app.logger.exception(f"mpesa.callback ticket processing failed: {str(e)}")
+                    db.session.rollback()
+                    # Re-raise to trigger the outer exception handler
+                    raise
         else:
             p.status = "failed"
         db.session.commit()
