@@ -37,17 +37,20 @@ class OrganizerDashboardResource(Resource):
 class AdminDashboardResource(Resource):
     @jwt_required()
     def get(self):
-        claims = get_jwt()
-        role = claims.get("role")
-        if role != "admin":
-            return {"message": "Forbidden"}, 403
-        users_count = User.query.count()
-        events_count = Event.query.count()
-        orders_count = Order.query.count()
-        return {
-            "stats": {
-                "users_count": users_count,
-                "events_count": events_count,
-                "orders_count": orders_count,
-            }
-        }, 200
+        try:
+            claims = get_jwt()
+            role = claims.get("role")
+            if role != "admin":
+                return {"message": "Forbidden"}, 403
+            users_count = User.query.count()
+            events_count = Event.query.count()
+            orders_count = Order.query.count()
+            return {
+                "stats": {
+                    "users_count": users_count,
+                    "events_count": events_count,
+                    "orders_count": orders_count
+                }
+            }, 200
+        except Exception as e:
+            return {"message": str(e)}, 500
