@@ -118,7 +118,7 @@ export default function EventForm ({ onCreated }) {
     <div className='bg-white border rounded p-4'>
       <h3 className='text-lg font-semibold mb-3'>Create Event</h3>
       <Formik initialValues={init} validationSchema={Schema} onSubmit={submit}>
-        {({ isSubmitting, status, setFieldValue }) => (
+        {({ isSubmitting, status, setFieldValue, values }) => (
           <Form className='grid grid-cols-1 md:grid-cols-2 gap-3'>
             <div className='md:col-span-2'>
               <label className='block text-sm mb-1'>Banner Image</label>

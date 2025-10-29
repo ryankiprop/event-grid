@@ -17,6 +17,7 @@ import Home from './pages/public/Home'
 import RegisterOrganizer from './pages/auth/RegisterOrganizer'
 import Checkin from './pages/dashboard/Checkin'
 import OrderConfirmation from './pages/public/OrderConfirmation'
+import Profile from './pages/dashboard/Profile'
 
 function PrivateRoute ({ children }) {
   const { user } = useAuth()
@@ -44,6 +45,7 @@ export default function App () {
               <Route path='/dashboard/events/:id/edit' element={<PrivateRoute><EditEvent /></PrivateRoute>} />
               <Route path='/dashboard/events/:id/orders' element={<PrivateRoute><EventOrders /></PrivateRoute>} />
               <Route path='/dashboard/events/:id/checkin' element={<PrivateRoute><Checkin /></PrivateRoute>} />
+              <Route path='/dashboard/profile' element={<PrivateRoute><Profile /></PrivateRoute>} />
               <Route path='/orders/:id/confirmation' element={<PrivateRoute><OrderConfirmation /></PrivateRoute>} />
               <Route path='/' element={<Home />} />
             </Routes>
