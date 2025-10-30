@@ -2,14 +2,14 @@
 
 A full-stack event management platform for creating, discovering, and managing events with ticket sales and attendee management.
 
-## 🌐 Live Demo
+##  Live Demo
 
 Explore our live demo:
 
-- **Frontend**: [https://yourapp-frontend.vercel.app](https://yourapp-frontend.vercel.app)
-- **API Documentation**: [https://yourapp-backend.herokuapp.com/api/docs](https://yourapp-backend.herokuapp.com/api/docs)
+- **Frontend**: https://event-grid-gilt.vercel.app/
+- **API Documentation**: https://event-grid.onrender.com
 
-> **Note**: Replace these placeholder URLs with your actual deployed URLs when available.
+
 
 ### Test Credentials
 - **Admin Account**:
@@ -22,7 +22,7 @@ Explore our live demo:
   - Email: user@example.com
   - Password: user123
 
-## 🚀 Features
+##  Features
 
 - **User Authentication** - Secure JWT-based authentication system
 - **Event Management** - Create, update, and manage events with rich details
@@ -178,7 +178,7 @@ npm test
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 This project was made possible thanks to these amazing open-source projects:
 

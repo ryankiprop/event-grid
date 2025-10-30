@@ -201,50 +201,70 @@ def init_app(app):
         return {"message": "Deleted"}, 200
 
 
-class EventStatsResource(Resource):
-    @jwt_required()
-    def get(self, event_id):
-        eid = _parse_uuid(event_id)
-        if not eid:
-            return {"message": "Invalid id"}, 400
-        ev = Event.query.get(eid)
-        if not ev:
-            return {"message": "Not found"}, 404
+@app.route('/api/events/<string:event_id>/stats', methods=['GET'])
+@jwt_required()
+def get_event_stats(event_id):
+    eid = _parse_uuid(event_id)
+    if not eid:
+        return jsonify({"message": "Invalid id"}), 400
+        
+    event = Event.query.get(eid)
+    if not event:
+        return jsonify({"message": "Event not found"}), 404
 
-        claims = get_jwt()
-        role = claims.get("role")
-        uid = _parse_uuid(get_jwt_identity())
-        if role != "admin" and (not uid or ev.organizer_id != uid):
-            return {"message": "Forbidden"}, 403
+    claims = get_jwt()
+    role = claims.get("role")
+    uid = _parse_uuid(get_jwt_identity())
+    if role != "admin" and (not uid or event.organizer_id != uid):
+        return jsonify({"message": "Forbidden"}), 403
 
-        # Compute totals
-        ttypes = TicketType.query.filter_by(event_id=eid).all()
-        tickets_sold = sum((t.quantity_sold or 0) for t in ttypes)
-        tickets_total = sum((t.quantity_total or 0) for t in ttypes)
-        tickets_remaining = max(0, tickets_total - tickets_sold)
+    # Compute totals
+    ttypes = TicketType.query.filter_by(event_id=eid).all()
+    tickets_sold = sum((t.quantity_sold or 0) for t in ttypes)
+    tickets_total = sum((t.quantity_total or 0) for t in ttypes)
+    tickets_remaining = max(0, tickets_total - tickets_sold)
 
-        orders_q = Order.query.filter_by(event_id=eid)
-        orders_count = orders_q.count()
-        revenue_cents = sum(
-            (o.total_amount or 0) for o in orders_q if (o.status or "paid") == "paid"
-        )
+    orders_q = Order.query.filter_by(event_id=eid)
+    orders_count = orders_q.count()
+    revenue_cents = sum(
+        (o.total_amount or 0) for o in orders_q if o.status == "paid"
+    )
 
-        return {
-            "stats": {
-                "tickets_sold": tickets_sold,
-                "tickets_total": tickets_total,
-                "tickets_remaining": tickets_remaining,
-                "orders_count": orders_count,
-                "revenue_cents": revenue_cents,
+    # Get recent orders
+    recent_orders = (
+        Order.query.filter_by(event_id=eid)
+        .order_by(Order.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    # Get ticket type breakdown
+    ticket_breakdown = [
+        {
+            "name": t.name,
+            "sold": t.quantity_sold or 0,
+            "total": t.quantity_total or 0,
+            "price": t.price or 0,
+        }
+        for t in ttypes
+    ]
+
+    return jsonify({
+        "tickets_sold": tickets_sold,
+        "tickets_total": tickets_total,
+        "tickets_remaining": tickets_remaining,
+        "orders_count": orders_count,
+        "revenue_cents": revenue_cents,
+        "revenue_kes": revenue_cents / 100,
+        "ticket_breakdown": ticket_breakdown,
+        "recent_orders": [
+            {
+                "id": str(o.id),
+                "user_id": str(o.user_id),
+                "total_amount": o.total_amount,
+                "status": o.status,
+                "created_at": o.created_at.isoformat(),
             }
-        }, 200
-
-
-# Create the events blueprint
-events_bp = Blueprint('events', __name__)
-api = Api(events_bp)
-
-# Add resources to the API
-api.add_resource(EventsListResource, '/events')
-api.add_resource(EventResource, '/events/<string:event_id>')
-api.add_resource(EventStatsResource, '/events/<string:event_id>/stats')
+            for o in recent_orders
+        ],
+    })
