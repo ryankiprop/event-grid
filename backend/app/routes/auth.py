@@ -1,24 +1,46 @@
 from uuid import UUID as _UUID
 
-from flask import request
+from flask import request, current_app
 from flask_jwt_extended import (
     create_access_token,
     get_jwt_identity,
     jwt_required,
 )
-from flask_restful import Resource
+from flask_restx import Namespace, Resource, fields
 
 from ..extensions import db
 from ..models import User
 from ..schemas import UserCreateSchema, UserLoginSchema, UserSchema
 from ..utils.auth import check_password, hash_password
+from ..utils.email import send_welcome_email  # Add this import
+
+# Create a namespace for auth routes
+auth_ns = Namespace('auth', description='Authentication operations')
+
+# Import models
+from ..api_models import user_model, login_model, error_model
+
+# Add models to namespace
+auth_ns.models[user_model.name] = user_model
+auth_ns.models[login_model.name] = login_model
+auth_ns.models[error_model.name] = error_model
 
 user_schema = UserSchema()
 user_create_schema = UserCreateSchema()
 user_login_schema = UserLoginSchema()
 
-
+@auth_ns.route('/register')
+@auth_ns.doc(security=None)
 class RegisterResource(Resource):
+    @auth_ns.doc('register_user')
+    @auth_ns.expect(auth_ns.model('Register', {
+        'email': fields.String(required=True, description='User email'),
+        'password': fields.String(required=True, description='Password (min 8 characters)'),
+        'first_name': fields.String(required=True, description='First name'),
+        'last_name': fields.String(required=True, description='Last name')
+    }))
+    @auth_ns.response(201, 'User registered successfully', user_model)
+    @auth_ns.response(400, 'Invalid input', error_model)
     def post(self):
         json_data = request.get_json() or {}
         errors = user_create_schema.validate(json_data)
@@ -40,13 +62,28 @@ class RegisterResource(Resource):
         db.session.add(user)
         db.session.commit()
 
+        # Send welcome email (fire and forget)
+        try:
+            send_welcome_email(user)
+        except Exception as e:
+            # Log the error but don't fail the registration
+            current_app.logger.error(f"Failed to send welcome email: {str(e)}")
+
         token = create_access_token(
             identity=str(user.id), additional_claims={"role": user.role}
         )
         return {"token": token, "user": user_schema.dump(user)}, 201
 
-
+@auth_ns.route('/login')
+@auth_ns.doc(security=None)
 class LoginResource(Resource):
+    @auth_ns.doc('user_login')
+    @auth_ns.expect(login_model)
+    @auth_ns.response(200, 'Login successful', {
+        'token': fields.String(description='JWT access token'),
+        'user': fields.Nested(user_model)
+    })
+    @auth_ns.response(400, 'Invalid credentials', error_model)
     def post(self):
         json_data = request.get_json() or {}
         errors = user_login_schema.validate(json_data)
@@ -65,8 +102,11 @@ class LoginResource(Resource):
         )
         return {"token": token, "user": user_schema.dump(user)}, 200
 
-
+@auth_ns.route('/me')
 class MeResource(Resource):
+    @auth_ns.doc(security='Bearer Auth')
+    @auth_ns.response(200, 'Success', user_model)
+    @auth_ns.response(401, 'Unauthorized', error_model)
     @jwt_required()
     def get(self):
         identity = get_jwt_identity()
@@ -79,6 +119,14 @@ class MeResource(Resource):
             return {"message": "User not found"}, 404
         return user_schema.dump(user), 200
         
+    @auth_ns.doc(security='Bearer Auth')
+    @auth_ns.expect(auth_ns.model('UpdateProfile', {
+        'first_name': fields.String(description='New first name'),
+        'last_name': fields.String(description='New last name')
+    }))
+    @auth_ns.response(200, 'Profile updated', user_model)
+    @auth_ns.response(400, 'Invalid input', error_model)
+    @auth_ns.response(401, 'Unauthorized', error_model)
     @jwt_required()
     def put(self):
         identity = get_jwt_identity()
@@ -105,9 +153,28 @@ class MeResource(Resource):
         
         return {"message": "Profile updated successfully", "user": user_schema.dump(user)}, 200
 
-
+@auth_ns.route('/register-organizer')
 class RegisterOrganizerResource(Resource):
+    @auth_ns.doc(security='Bearer Auth')
+    @auth_ns.expect(auth_ns.model('RegisterOrganizer', {
+        'email': fields.String(required=True, description='Organizer email'),
+        'password': fields.String(required=True, description='Password (min 8 characters)'),
+        'first_name': fields.String(required=True, description='First name'),
+        'last_name': fields.String(required=True, description='Last name'),
+        'organization': fields.String(required=True, description='Organization name')
+    }))
+    @auth_ns.response(201, 'Organizer registered successfully', user_model)
+    @auth_ns.response(400, 'Invalid input', error_model)
+    @auth_ns.response(401, 'Unauthorized', error_model)
+    @auth_ns.response(403, 'Forbidden', error_model)
+    @jwt_required()
     def post(self):
+        # Check if current user is admin
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        if not current_user or current_user.role != 'admin':
+            return {"message": "Only admin can register organizers"}, 403
+
         json_data = request.get_json() or {}
         errors = user_create_schema.validate(json_data)
         if errors:
@@ -124,11 +191,15 @@ class RegisterOrganizerResource(Resource):
             first_name=json_data.get("first_name"),
             last_name=json_data.get("last_name"),
             role="organizer",
+            organization=json_data.get("organization")
         )
         db.session.add(user)
         db.session.commit()
 
-        token = create_access_token(
-            identity=str(user.id), additional_claims={"role": user.role}
-        )
-        return {"token": token, "user": user_schema.dump(user)}, 201
+        # Send welcome email to organizer
+        try:
+            send_welcome_email(user)
+        except Exception as e:
+            current_app.logger.error(f"Failed to send welcome email to organizer: {str(e)}")
+
+        return {"message": "Organizer registered successfully", "user": user_schema.dump(user)}, 201

@@ -15,8 +15,9 @@ from config import Config
 from .cli import register_cli
 from .extensions import db, jwt, migrate
 from .models.payment import Payment
-from .routes import register_routes
 
+# Import API after app to avoid circular imports
+from .api import api
 
 def create_app():
     app = Flask(__name__)
@@ -29,6 +30,7 @@ def create_app():
         default_limits=["200 per day", "50 per hour"],
         storage_uri="memory://",
     )
+    
     CORS(
         app,
         resources={
@@ -40,6 +42,7 @@ def create_app():
             }
         }
     )
+    
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -67,8 +70,8 @@ def create_app():
         except Exception as e:
             app.logger.error(f"Migration failed: {str(e)}")
 
-    # Register routes
-    register_routes(app)
+    # Initialize API
+    api.init_app(app)
 
     # Create upload folder if it doesn't exist
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -101,7 +104,7 @@ def create_app():
     @app.route("/")
     def index():
         return jsonify(
-            {"name": "EventLync API", "status": "running", "version": "1.0.0"}
+            {"name": "EventGrid API", "status": "running", "version": "1.0.0"}
         )
 
     # Add CORS preflight handler
@@ -114,22 +117,25 @@ def create_app():
             'Access-Control-Allow-Credentials': 'true'
         }
 
+    # Register CLI commands
+    register_cli(app)
+
     # Error handlers
     @app.errorhandler(404)
-    def not_found(error):
-        return jsonify({"error": "Not found"}), 404
+    def not_found_error(error):
+        return jsonify({"message": "Resource not found"}), 404
 
     @app.errorhandler(500)
     def server_error(error):
         app.logger.error(f"Server error: {str(error)}")
         return jsonify({"error": "Internal server error"}), 500
 
-    @app.get("/api/health")
+    @app.route("/api/health")
     def health():
-        return {"status": "ok"}, 200
+        return jsonify({"status": "ok"}), 200
 
-    @app.get("/health")
+    @app.route("/health")
     def health_alias():
-        return {"status": "ok"}, 200
+        return jsonify({"status": "ok"}), 200
 
     return app
