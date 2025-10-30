@@ -1,16 +1,16 @@
 import json
-from uuid import UUID as _UUID
+import os
+from uuid import UUID as _UUID, uuid4
 
 from flask import current_app, request, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 
 from ..extensions import db
-from ..models import Event, Order, OrderItem, TicketType
+from ..models import Event, Order, OrderItem, TicketType, Ticket
 from ..models.payment import Payment
 from ..utils.mpesa import initiate_stk_push
-from ..utils.qrcode_util import generate_ticket_qr
-import os
+from ..utils.qrcode_util import generate_ticket_qr, build_ticket_qr_payload
 
 
 def _uuid(v):
@@ -20,13 +20,28 @@ def _uuid(v):
         return None
 
 
+def is_free_mode():
+    """Check if free mode is enabled via environment or request header"""
+    env_free = (os.getenv("FREE_MODE") or "").lower() in ("1", "true", "yes")
+    # Allow overriding per-request for testing
+    if request.headers.get('X-Free-Mode') == 'true':
+        return True
+    return env_free
+
 def init_app(app):
     @app.route('/api/payments/mpesa/initiate', methods=['POST'])
     @jwt_required()
     def initiate_mpesa_payment():
-        # Block payments if FREE_MODE or DISABLE_PAYMENTS is enabled
-        if (os.getenv("FREE_MODE") or "").lower() in ("1", "true", "yes") or (os.getenv("DISABLE_PAYMENTS") or "").lower() in ("1", "true", "yes"):
-            return {"message": "Payments are disabled in free mode."}, 400
+        # Block payments if in free mode
+        if is_free_mode():
+            return {
+                "message": "Payments are disabled in free mode. Use the direct order endpoint.",
+                "free_mode": True
+            }, 400
+            
+        # Check if payments are disabled
+        if (os.getenv("DISABLE_PAYMENTS") or "").lower() in ("1", "true", "yes"):
+            return {"message": "Payments are currently disabled."}, 400
         data = request.get_json() or {}
         user_id = _uuid(get_jwt_identity())
         if not user_id:
@@ -92,7 +107,39 @@ def init_app(app):
         # Update order total
         order.total_amount = total_amount
 
-        # Create payment record
+        # In free mode, mark as paid immediately
+        if is_free_mode():
+            order.status = "paid"
+            order.payment_method = "free"
+            db.session.add(order)
+            
+            # Create tickets immediately for free mode
+            for item in order.items:
+                for _ in range(item.quantity):
+                    ticket = Ticket(
+                        order_item_id=item.id,
+                        event_id=event_id,
+                        user_id=user_id,
+                        ticket_type_id=item.ticket_type_id,
+                        status="active",
+                        qr_data=build_ticket_qr_payload(
+                            order_id=str(order.id),
+                            event_id=str(event_id),
+                            ticket_type_id=str(item.ticket_type_id),
+                            user_id=str(user_id)
+                        )
+                    )
+                    db.session.add(ticket)
+            
+            db.session.commit()
+            return jsonify({
+                "message": "Order processed in free mode",
+                "order_id": str(order.id),
+                "status": "paid",
+                "free_mode": True
+            })
+
+        # Regular payment flow
         payment = Payment(
             order=order,
             amount=total_amount,

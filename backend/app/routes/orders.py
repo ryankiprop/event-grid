@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from uuid import UUID as _UUID
+from uuid import UUID as _UUID, uuid4
 import json
 import traceback
 
@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from ..extensions import db
 from ..models.event import Event
 from ..models.order import Order, OrderItem
-from ..models.ticket import TicketType
+from ..models.ticket import TicketType, Ticket
 from ..models.user import User
 from ..schemas.order_schema import CreateOrderSchema, OrderSchema
 from ..utils.email import send_order_confirmation
@@ -20,7 +20,14 @@ from ..utils.qrcode_util import build_ticket_qr_payload
 order_schema = OrderSchema()
 orders_schema = OrderSchema(many=True)
 create_order_schema = CreateOrderSchema()
-FREE_MODE = (os.getenv("FREE_MODE") or "").lower() in ("1", "true", "yes")
+
+def is_free_mode():
+    """Check if free mode is enabled via environment or request header"""
+    env_free = (os.getenv("FREE_MODE") or "").lower() in ("1", "true", "yes")
+    # Allow overriding per-request for testing
+    if request.headers.get('X-Free-Mode') == 'true':
+        return True
+    return env_free
 
 def _uuid(v):
     try:
@@ -37,7 +44,8 @@ def init_app(app):
             raw = request.get_json(silent=True) or {}
             current_app.logger.info(f"Request data: {raw}")
 
-            if not FREE_MODE:
+            # In free mode, we allow direct order creation without payment
+            if not is_free_mode():
                 return {
                     "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
                 }, 400
@@ -63,8 +71,15 @@ def init_app(app):
                 current_app.logger.error(f"Event not found: {event_id}")
                 return {"message": "Event not found"}, 404
             current_app.logger.info(f"Creating order for user {user_id}, event {event_id}")
-            # Build order
-            order = Order(user_id=user_id, event_id=event.id, total_amount=0, status="paid")
+            # Build order with appropriate status based on free mode
+            order_status = "paid" if is_free_mode() else "pending"
+            order = Order(
+                user_id=user_id, 
+                event_id=event.id, 
+                total_amount=0, 
+                status=order_status,
+                payment_method="free" if is_free_mode() else None
+            )
             db.session.add(order)
             try:
                 db.session.flush()  # get order.id
@@ -156,6 +171,23 @@ def init_app(app):
                     )
                     oi.qr_code = qr_payload
                     
+                    # Create tickets for each order item
+                    for _ in range(qty):
+                        ticket = Ticket(
+                            order_item_id=oi.id,
+                            event_id=event.id,
+                            user_id=user_id,
+                            ticket_type_id=tt.id,
+                            status="active" if is_free_mode() else "pending_payment",
+                            qr_data=build_ticket_qr_payload(
+                                order_id=str(order.id),
+                                event_id=str(event.id),
+                                ticket_type_id=str(tt.id),
+                                user_id=str(user_id)
+                            )
+                        )
+                        db.session.add(ticket)
+                    
                     # Update quantity sold
                     tt.quantity_sold = (tt.quantity_sold or 0) + qty
                     current_app.logger.info(f"Updated quantity sold for ticket type {tt.id}: {tt.quantity_sold}")
@@ -180,15 +212,21 @@ def init_app(app):
                 current_app.logger.info(f"Order {order.id} created successfully")
                 
                 # Send confirmation email (best-effort)
-                user = User.query.get(user_id)
-                if user and user.email:
-                    try:
-                        current_app.logger.info(f"Sending order confirmation to {user.email}")
-                        send_order_confirmation(user, order)
-                    except Exception as e:
-                        current_app.logger.error(f"Failed to send order confirmation email: {e}")
-                
-                return {"order": order_schema.dump(order)}, 201
+                try:
+                    user = User.query.get(user_id)
+                    if user and user.email:
+                        send_order_confirmation(user.email, order, event)
+                except Exception as e:
+                    current_app.logger.error(f"Failed to send confirmation email: {str(e)}")
+                    current_app.logger.error(traceback.format_exc())
+
+                # Add free mode info to response
+                response = order_schema.dump(order)
+                if is_free_mode():
+                    response["free_mode"] = True
+                    response["message"] = "Order created successfully in free mode"
+
+                return response, 201
                 
             except Exception as e:
                 db.session.rollback()
