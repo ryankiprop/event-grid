@@ -32,152 +32,51 @@ def init_app(app):
     @app.route('/api/orders', methods=['POST'])
     @jwt_required()
     def create_order():
-        try:
-            data = request.get_json() or {}
-            print("\n=== Processing Order ===")
-            
-            # Force free checkout
-            payment_method = 'free'
-            data['payment_method'] = payment_method
-            
-            # Basic validation
-            if not data.get('event_id') or not data.get('items') or not isinstance(data['items'], list):
-                return jsonify({"message": "Missing required fields: event_id and items array are required"}), 400
-                
-            user_id = _uuid(get_jwt_identity())
-            if not user_id:
-                return jsonify({"message": "Invalid user token"}), 400
-                
-            event_id = _uuid(data['event_id'])
-            if not event_id:
-                return jsonify({"message": "Invalid event ID format"}), 400
-                
-            event = Event.query.get(event_id)
-            if not event:
-                return jsonify({"message": "Event not found"}), 404
-                
-            # Process order items
-            order_items = []
-            total_amount = 0
-            
-            for item in data['items']:
-                if not item.get('ticket_type_id') or not item.get('quantity'):
-                    continue
-                    
-                ticket_type = TicketType.query.get(_uuid(item['ticket_type_id']))
-                if not ticket_type or ticket_type.event_id != event_id:
-                    continue
-                    
-                quantity = int(item.get('quantity', 1))
-                if quantity <= 0:
-                    continue
-                    
-                order_items.append({
-                    'ticket_type_id': str(ticket_type.id),
-                    'quantity': quantity,
-                    'unit_price': ticket_type.price
-                })
-                total_amount += ticket_type.price * quantity
-                
-            if not order_items:
-                return jsonify({"message": "No valid items in order"}), 400
-                
-            # Create order
-            order = Order(
-                user_id=user_id,
-                event_id=event_id,
-                total_amount=0,  # Free checkout
-                status='paid'    # Mark as paid immediately for free checkout
-            )
-            
-            db.session.add(order)
-            db.session.flush()  # Get the order ID
-            
-            # Create order items
-            for item in order_items:
-                order_item = OrderItem(
-                    order_id=order.id,
-                    ticket_type_id=item['ticket_type_id'],
-                    quantity=item['quantity'],
-                    unit_price=0  # Free checkout
-                )
-                db.session.add(order_item)
-                
-            # Create payment record
-            payment = Payment(
-                order_id=order.id,
-                amount=0,
-                provider='free',
-                status='completed',
-                currency='KES',
-                payment_method='free'
-            )
-            db.session.add(payment)
-            
-            db.session.commit()
-            
-            # Generate QR codes for tickets
-            for item in order.items:
-                item.qr_code = generate_ticket_qr(str(item.id))
-                
-            db.session.commit()
-            
-            # Send confirmation email (if configured)
-            try:
-                user = User.query.get(user_id)
-                if user and user.email:
-                    send_order_confirmation(user.email, order)
-            except Exception as e:
-                print(f"Error sending confirmation email: {str(e)}")
-                
-            return jsonify({
-                "message": "Order created successfully",
-                "order_id": str(order.id)
-            }), 201
-            
-        except Exception as e:
-            db.session.rollback()
-            print(f"Error creating order: {str(e)}")
-            return jsonify({"message": "Error processing your order. Please try again."}), 500
-            
+        raw = request.get_json(silent=True) or {}
+
+        if not FREE_MODE:
+            return {
+                "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
+            }, 400
+        json_data = raw
+        errors = create_order_schema.validate(json_data)
+        if errors:
+            return {"errors": errors}, 400
+        user_id = _uuid(get_jwt_identity())
+        if not user_id:
+            return {"message": "Invalid token"}, 400
+        event_id = _uuid(json_data.get("event_id"))
+        if not event_id:
+            return {"message": "Invalid event id"}, 400
         event = Event.query.get(event_id)
         if not event:
-            return jsonify({"message": "Event not found"}), 404
-            
+            return {"message": "Event not found"}, 404
         # Build order
-        order = Order(
-            user_id=user_id, 
-            event_id=event.id, 
-            total_amount=0, 
-            status="paid" if payment_method == 'free' else "pending"
-        )
+        order = Order(user_id=user_id, event_id=event.id, total_amount=0, status="paid")
         db.session.add(order)
         db.session.flush()  # get order.id
-        
         total = 0
         # Validate and reserve tickets
-        for item in data.get("items", []):
+        items_in = json_data.get("items", [])
+        if not items_in:
+            return {"message": "No items provided. Add at least one ticket."}, 400
+
+        item_errors = []
+        for idx, item in enumerate(items_in):
             tt_id = _uuid(item.get("ticket_type_id"))
             qty = int(item.get("quantity") or 0)
-            
             if not tt_id or qty <= 0:
-                db.session.rollback()
-                return jsonify({"message": "Invalid ticket item"}), 400
-                
+                item_errors.append({"index": idx, "message": "Invalid ticket item (ticket_type_id and positive quantity required)"})
+                continue
             tt = TicketType.query.get(tt_id)
             if not tt or tt.event_id != event.id:
-                db.session.rollback()
-                return jsonify({"message": "Ticket type not found for event"}), 404
-                
-            if tt.quantity_available is not None and tt.quantity_available < qty:
-                db.session.rollback()
-                return jsonify({
-                    "message": f"Insufficient availability for {tt.name}"
-                }), 400
-                
+                item_errors.append({"index": idx, "message": "Ticket type not found for event"})
+                continue
+            if tt.quantity_available < qty:
+                item_errors.append({"index": idx, "message": f"Insufficient availability for {tt.name}"})
+                continue
             line_total = tt.price * qty
             total += line_total
-            
             oi = OrderItem(
                 order_id=order.id,
                 ticket_type_id=tt.id,
@@ -186,39 +85,31 @@ def init_app(app):
             )
             db.session.add(oi)
             db.session.flush()  # get oi.id
-            
-            # Generate QR code for the ticket
-            oi.qr_code = generate_ticket_qr(order.id, oi.id, user_id)
-            
-            # Update ticket availability
-            if tt.quantity_available is not None:
-                tt.quantity_available -= qty
-                tt.quantity_sold = (tt.quantity_sold or 0) + qty
-        
+            oi.qr_code = build_ticket_qr_payload(
+                order_id=order.id,
+                item_id=oi.id,
+                user_id=user_id,
+                event_id=event.id,
+                event_title=event.title,
+                event_start_date_iso=(event.start_date.isoformat() if getattr(event, "start_date", None) else None),
+                ticket_type_id=tt.id,
+                ticket_type_name=tt.name,
+            )
+            tt.quantity_sold = (tt.quantity_sold or 0) + qty
+
+        if item_errors and total == 0:
+            db.session.rollback()
+            return {"message": "No valid items in order", "errors": item_errors}, 400
+
         order.total_amount = total
-        
-        is_free_checkout = payment_method == 'free'
-        payment = Payment(
-            order_id=order.id,
-            amount=0 if is_free_checkout else total,
-            provider='free' if is_free_checkout else 'mpesa',
-            status='completed' if is_free_checkout else 'pending',
-            currency='KES',
-            payment_method=payment_method or 'mpesa'
-        )
-        db.session.add(payment)
-        
         db.session.commit()
-        
-        # Send confirmation email
+        # Send confirmation (best-effort)
         try:
             user = User.query.get(user_id)
-            if user and user.email:
-                send_order_confirmation(user.email, order)
-        except Exception as e:
-            app.logger.error(f"Failed to send confirmation email: {str(e)}")
-        
-        return jsonify(order_schema.dump(order)), 201
+            send_order_confirmation(user, order)
+        except Exception:
+            pass
+        return {"order": order_schema.dump(order)}, 201
 
     @app.route('/api/orders/user', methods=['GET'])
     @jwt_required()

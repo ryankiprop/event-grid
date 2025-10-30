@@ -4,7 +4,6 @@ import { fetchEvent } from '../../services/events'
 import LoadingSpinner from '../../components/ui/LoadingSpinner'
 import TicketSelector from '../../components/events/TicketSelector'
 import { createOrder } from '../../services/orders'
-import { initiateMpesa, getPayment } from '../../services/payments'
 import { useAuth } from '../../context/AuthContext'
 import TicketManager from '../../components/events/TicketManager'
 
@@ -20,8 +19,7 @@ export default function EventDetails () {
   const [submitting, setSubmitting] = useState(false)
   const [ticketTypes, setTicketTypes] = useState([])
   const [phone, setPhone] = useState('')
-  const [mpesaPending, setMpesaPending] = useState(false)
-  const [mpesaPaymentId, setMpesaPaymentId] = useState(null)
+  
 
   useEffect(() => {
     let mounted = true
@@ -49,50 +47,7 @@ export default function EventDetails () {
     return sum + ((tt?.price || 0) * (it.quantity || 0))
   }, 0)
 
-  const onPayMpesa = async () => {
-    if (!user) {
-      setStatus({ err: 'Please login to purchase tickets.' })
-      return
-    }
-    if (!cartItems.length) {
-      setStatus({ err: 'Select at least one ticket.' })
-      return
-    }
-    if (!/^2547\d{8}$/.test(phone.trim())) {
-      setStatus({ err: 'Enter phone in format 2547XXXXXXXX' })
-      return
-    }
-    setStatus(null)
-    setMpesaPending(true)
-    try {
-      const res = await initiateMpesa({ event_id: event.id, phone: phone.trim(), items: cartItems })
-      const pid = res?.payment?.id
-      const oid = res?.payment?.order_id
-      // poll status until success/failed or timeout ~2 minutes
-      const started = Date.now()
-      const poll = async () => {
-        try {
-          const st = await getPayment(pid)
-          const statusVal = st?.payment?.status
-          if (statusVal === 'success') {
-            setMpesaPending(false)
-            navigate(`/orders/${oid}/confirmation`)
-            return
-          }
-          if (statusVal === 'failed' || Date.now() - started > 120000) {
-            setMpesaPending(false)
-            setStatus({ err: 'Payment not completed. You can try again.' })
-            return
-          }
-        } catch {}
-        setTimeout(poll, 3000)
-      }
-      poll()
-    } catch (e) {
-      setMpesaPending(false)
-      setStatus({ err: e?.response?.data?.message || 'Failed to initiate M-Pesa payment' })
-    }
-  }
+  
 
   const onPurchase = async () => {
     if (!user) {
@@ -146,8 +101,8 @@ export default function EventDetails () {
                   {/* Free Checkout Button */}
                   <button 
                     onClick={onPurchase} 
-                    disabled={submitting || mpesaPending}
-                    className={`w-full py-3 px-4 rounded-md font-medium text-white transition-colors ${totalCents > 0 ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'} ${(submitting || mpesaPending) ? 'opacity-75 cursor-not-allowed' : ''}`}
+                    disabled={submitting}
+                    className={`w-full py-3 px-4 rounded-md font-medium text-white transition-colors ${totalCents > 0 ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'} ${(submitting) ? 'opacity-75 cursor-not-allowed' : ''}`}
                   >
                     {submitting ? (
                       'Processing...'
@@ -157,43 +112,7 @@ export default function EventDetails () {
                       'Get Free Ticket'
                     )}
                   </button>
-
-                  {import.meta.env.VITE_ENABLE_FREE_CHECKOUT !== 'true' && (
-                    <>
-                      {/* OR Divider */}
-                      <div className='relative my-2'>
-                        <div className='absolute inset-0 flex items-center'>
-                          <div className='w-full border-t border-gray-300'></div>
-                        </div>
-                        <div className='relative flex justify-center text-sm'>
-                          <span className='px-2 bg-white text-gray-500'>OR</span>
-                        </div>
-                      </div>
-
-                      {/* M-Pesa Payment */}
-                      <div className='space-y-3'>
-                        <div className='flex items-center gap-2'>
-                          <input
-                            type='tel'
-                            className='flex-1 border rounded-md px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent'
-                            placeholder='2547XXXXXXXX'
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                          />
-                          <button 
-                            onClick={onPayMpesa} 
-                            disabled={mpesaPending || !phone}
-                            className={`px-6 py-2 rounded-md font-medium text-white ${mpesaPending ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} transition-colors ${!phone ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          >
-                            {mpesaPending ? 'Processing...' : 'Pay with M-Pesa'}
-                          </button>
-                        </div>
-                        <p className='text-xs text-gray-500'>
-                          Enter your M-Pesa registered phone number (e.g., 254712345678)
-                        </p>
-                      </div>
-                    </>
-                  )}
+                  
                 </div>
               )}
               
