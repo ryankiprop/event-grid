@@ -8,7 +8,9 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_migrate import Migrate, upgrade
 from flask_sqlalchemy import SQLAlchemy
+from marshmallow import ValidationError
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from config import Config
 
@@ -23,12 +25,31 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # Configure logging
+    if not app.debug:
+        import logging
+        from logging.handlers import RotatingFileHandler
+        
+        # Ensure log directory exists
+        os.makedirs('logs', exist_ok=True)
+        
+        # File handler with rotation
+        file_handler = RotatingFileHandler('logs/eventgrid.log', maxBytes=10240, backupCount=10)
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'))
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('EventGrid startup')
+
     # Initialize extensions
     limiter = Limiter(
         get_remote_address,
         app=app,
         default_limits=["200 per day", "50 per hour"],
         storage_uri="memory://",
+        strategy="fixed-window",
+        headers_enabled=True
     )
     
     CORS(
@@ -79,6 +100,75 @@ def create_app():
 
     # Create upload folder if it doesn't exist
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    
+    # Register error handlers
+    @app.errorhandler(400)
+    def bad_request_error(error):
+        app.logger.error(f'Bad request: {str(error)}')
+        return jsonify({
+            'success': False,
+            'error': 'Bad Request',
+            'message': str(error)
+        }), 400
+
+    @app.errorhandler(401)
+    def unauthorized_error(error):
+        return jsonify({
+            'success': False,
+            'error': 'Unauthorized',
+            'message': 'Authentication required'
+        }), 401
+
+    @app.errorhandler(403)
+    def forbidden_error(error):
+        return jsonify({
+            'success': False,
+            'error': 'Forbidden',
+            'message': 'You do not have permission to perform this action'
+        }), 403
+
+    @app.errorhandler(404)
+    def not_found_error(error):
+        return jsonify({
+            'success': False,
+            'error': 'Not Found',
+            'message': 'The requested resource was not found'
+        }), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        app.logger.error(f'Internal server error: {str(error)}', exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'Internal Server Error',
+            'message': 'An unexpected error occurred'
+        }), 500
+
+    # Handle database errors
+    @app.errorhandler(db.IntegrityError)
+    def handle_db_integrity_error(error):
+        db.session.rollback()
+        app.logger.error(f'Database integrity error: {str(error)}')
+        return jsonify({
+            'success': False,
+            'error': 'Database Error',
+            'message': 'A database integrity error occurred'
+        }), 400
+
+    # Handle validation errors
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(error):
+        return jsonify({
+            'success': False,
+            'error': 'Validation Error',
+            'message': str(error),
+            'errors': error.messages if hasattr(error, 'messages') else None
+        }), 400
+
+    @app.teardown_appcontext
+    def shutdown_session(exception=None):
+        """Ensure database connections are properly closed."""
+        db.session.remove()
 
     # Ensure database tables exist
     with app.app_context():
