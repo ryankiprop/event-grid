@@ -2,6 +2,7 @@ import hashlib
 import uuid
 import json
 from datetime import datetime
+from typing import Optional, Union
 
 def generate_ticket_qr(
     order_id: uuid.UUID, item_id: uuid.UUID, user_id: uuid.UUID
@@ -21,10 +22,10 @@ def build_ticket_qr_payload(
     item_id: uuid.UUID,
     user_id: uuid.UUID,
     event_id: uuid.UUID,
-    event_title: str | None = None,
-    event_start_date_iso: str | None = None,
-    ticket_type_id: uuid.UUID | None = None,
-    ticket_type_name: str | None = None,
+    event_title: Optional[str] = None,
+    event_start_date_iso: Optional[str] = None,
+    ticket_type_id: Optional[uuid.UUID] = None,
+    ticket_type_name: Optional[str] = None,
 ) -> str:
     """
     Returns a JSON string with ticket details suitable for encoding as a QR.

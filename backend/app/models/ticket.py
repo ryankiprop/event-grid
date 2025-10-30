@@ -27,3 +27,39 @@ class TicketType(db.Model):
     @property
     def quantity_available(self):
         return max(0, (self.quantity_total or 0) - (self.quantity_sold or 0))
+
+
+class Ticket(db.Model):
+    __tablename__ = 'tickets'
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_item_id = db.Column(UUID(as_uuid=True), db.ForeignKey('order_items.id'), nullable=False)
+    event_id = db.Column(UUID(as_uuid=True), db.ForeignKey('events.id'), nullable=False, index=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False, index=True)
+    ticket_type_id = db.Column(UUID(as_uuid=True), db.ForeignKey('ticket_types.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='pending_payment',
+                      index=True)  # pending_payment, active, used, cancelled
+    qr_data = db.Column(db.Text, nullable=True)  # Store QR code data or reference
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    order_item = db.relationship('OrderItem', backref=db.backref('tickets', lazy=True))
+    event = db.relationship('Event')
+    user = db.relationship('User')
+    ticket_type = db.relationship('TicketType')
+    
+    def __repr__(self):
+        return f'<Ticket {self.id} - {self.status}>'
+    
+    @property
+    def is_active(self):
+        return self.status == 'active'
+    
+    @classmethod
+    def mark_as_used(cls, ticket_id):
+        ticket = cls.query.get(ticket_id)
+        if ticket:
+            ticket.status = 'used'
+            db.session.commit()
+        return ticket
