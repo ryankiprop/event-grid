@@ -10,6 +10,7 @@ from ..models import Event, Order, OrderItem, TicketType
 from ..models.payment import Payment
 from ..utils.mpesa import initiate_stk_push
 from ..utils.qrcode_util import generate_ticket_qr
+import os
 
 
 def _uuid(v):
@@ -23,6 +24,9 @@ def init_app(app):
     @app.route('/api/payments/mpesa/initiate', methods=['POST'])
     @jwt_required()
     def initiate_mpesa_payment():
+        # Block payments if FREE_MODE or DISABLE_PAYMENTS is enabled
+        if (os.getenv("FREE_MODE") or "").lower() in ("1", "true", "yes") or (os.getenv("DISABLE_PAYMENTS") or "").lower() in ("1", "true", "yes"):
+            return {"message": "Payments are disabled in free mode."}, 400
         data = request.get_json() or {}
         user_id = _uuid(get_jwt_identity())
         if not user_id:

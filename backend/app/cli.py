@@ -135,3 +135,55 @@ def register_cli(app):
         click.echo(" - Admin: admin@example.com / password123")
         click.echo(" - Organizer: organizer@example.com / password123")
         click.echo(" - User: user@example.com / password123")
+
+    @app.cli.command("orders_force_complete_pending")
+    def orders_force_complete_pending():
+        """Mark all pending orders as paid, generate QR codes, update quantity_sold."""
+        from .models import Order, OrderItem, TicketType
+        with app.app_context():
+            updated = 0
+            orders = Order.query.filter_by(status="pending").all()
+            for order in orders:
+                order.status = "paid"
+                for oi in order.items:
+                    if not oi.qr_code:
+                        tt = TicketType.query.get(oi.ticket_type_id)
+                        oi.qr_code = build_ticket_qr_payload(
+                            order_id=order.id,
+                            item_id=oi.id,
+                            user_id=order.user_id,
+                            event_id=order.event_id,
+                            event_title=(order.event.title if getattr(order, "event", None) else None),
+                            event_start_date_iso=(order.event.start_date.isoformat() if getattr(getattr(order, "event", None), "start_date", None) else None),
+                            ticket_type_id=(tt.id if tt else None),
+                            ticket_type_name=(tt.name if tt else None),
+                        )
+                    # Update sold counts conservatively
+                    tt2 = TicketType.query.get(oi.ticket_type_id)
+                    if tt2:
+                        tt2.quantity_sold = (tt2.quantity_sold or 0) + (oi.quantity or 0)
+                updated += 1
+            db.session.commit()
+            click.echo(f"Force-completed {updated} pending orders.")
+
+    @app.cli.command("tickets_make_free")
+    @click.option("--event", "event_id", default=None, help="Scope to a specific event UUID")
+    def tickets_make_free(event_id):
+        """Set all ticket types (or those under an event) to price=0."""
+        from .models import TicketType
+        with app.app_context():
+            q = TicketType.query
+            if event_id:
+                try:
+                    eid = UUID(str(event_id))
+                except Exception:
+                    click.echo("Invalid event id; aborting.")
+                    return
+                q = q.filter_by(event_id=eid)
+            count = 0
+            for tt in q.all():
+                tt.price = 0
+                count += 1
+            db.session.commit()
+            scope = f"event {event_id}" if event_id else "all events"
+            click.echo(f"Set price=0 for {count} ticket types under {scope}.")

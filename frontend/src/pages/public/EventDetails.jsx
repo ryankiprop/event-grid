@@ -158,38 +158,42 @@ export default function EventDetails () {
                     )}
                   </button>
 
-                  {/* OR Divider */}
-                  <div className='relative my-2'>
-                    <div className='absolute inset-0 flex items-center'>
-                      <div className='w-full border-t border-gray-300'></div>
-                    </div>
-                    <div className='relative flex justify-center text-sm'>
-                      <span className='px-2 bg-white text-gray-500'>OR</span>
-                    </div>
-                  </div>
+                  {import.meta.env.VITE_ENABLE_FREE_CHECKOUT !== 'true' && (
+                    <>
+                      {/* OR Divider */}
+                      <div className='relative my-2'>
+                        <div className='absolute inset-0 flex items-center'>
+                          <div className='w-full border-t border-gray-300'></div>
+                        </div>
+                        <div className='relative flex justify-center text-sm'>
+                          <span className='px-2 bg-white text-gray-500'>OR</span>
+                        </div>
+                      </div>
 
-                  {/* M-Pesa Payment */}
-                  <div className='space-y-3'>
-                    <div className='flex items-center gap-2'>
-                      <input
-                        type='tel'
-                        className='flex-1 border rounded-md px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent'
-                        placeholder='2547XXXXXXXX'
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                      />
-                      <button 
-                        onClick={onPayMpesa} 
-                        disabled={mpesaPending || !phone}
-                        className={`px-6 py-2 rounded-md font-medium text-white ${mpesaPending ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} transition-colors ${!phone ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        {mpesaPending ? 'Processing...' : 'Pay with M-Pesa'}
-                      </button>
-                    </div>
-                    <p className='text-xs text-gray-500'>
-                      Enter your M-Pesa registered phone number (e.g., 254712345678)
-                    </p>
-                  </div>
+                      {/* M-Pesa Payment */}
+                      <div className='space-y-3'>
+                        <div className='flex items-center gap-2'>
+                          <input
+                            type='tel'
+                            className='flex-1 border rounded-md px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent'
+                            placeholder='2547XXXXXXXX'
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                          />
+                          <button 
+                            onClick={onPayMpesa} 
+                            disabled={mpesaPending || !phone}
+                            className={`px-6 py-2 rounded-md font-medium text-white ${mpesaPending ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} transition-colors ${!phone ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            {mpesaPending ? 'Processing...' : 'Pay with M-Pesa'}
+                          </button>
+                        </div>
+                        <p className='text-xs text-gray-500'>
+                          Enter your M-Pesa registered phone number (e.g., 254712345678)
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
               
