@@ -49,4 +49,7 @@ class OrderItem(db.Model):
     ticket_type = db.relationship(
         "TicketType", backref=db.backref("order_items", lazy=True)
     )
+    
+    # Use string-based relationship to avoid circular imports
+    tickets = db.relationship("Ticket", back_populates="order_item", lazy=True)
     checked_in_by_user = db.relationship("User", foreign_keys=[checked_in_by])

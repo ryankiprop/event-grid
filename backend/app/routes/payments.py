@@ -7,7 +7,8 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 
 from ..extensions import db
-from ..models import Event, Order, OrderItem, TicketType, Ticket
+# Import models using string references to avoid circular imports
+from ..models import Event, Order, OrderItem, TicketType
 from ..models.payment import Payment
 from ..utils.mpesa import initiate_stk_push
 from ..utils.qrcode_util import generate_ticket_qr, build_ticket_qr_payload
@@ -114,6 +115,8 @@ def init_app(app):
             db.session.add(order)
             
             # Create tickets immediately for free mode
+            # Use string-based reference to Ticket model
+            Ticket = db.Model._decl_class_registry.get('Ticket')
             for item in order.items:
                 for _ in range(item.quantity):
                     ticket = Ticket(

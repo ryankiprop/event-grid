@@ -9,10 +9,11 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
+# Import models using string references to avoid circular imports
 from ..models.event import Event
 from ..models.order import Order, OrderItem
-from ..models.ticket import TicketType, Ticket
 from ..models.user import User
+# Import TicketType and Ticket using string references where needed
 from ..schemas.order_schema import CreateOrderSchema, OrderSchema
 from ..utils.email import send_order_confirmation
 from ..utils.qrcode_util import build_ticket_qr_payload
@@ -172,21 +173,24 @@ def init_app(app):
                     oi.qr_code = qr_payload
                     
                     # Create tickets for each order item
-                    for _ in range(qty):
-                        ticket = Ticket(
-                            order_item_id=oi.id,
-                            event_id=event.id,
-                            user_id=user_id,
-                            ticket_type_id=tt.id,
-                            status="active" if is_free_mode() else "pending_payment",
-                            qr_data=build_ticket_qr_payload(
-                                order_id=str(order.id),
-                                event_id=str(event.id),
-                                ticket_type_id=str(tt.id),
-                                user_id=str(user_id)
+                    for item in order.items:
+                        # Use string-based reference to Ticket model
+                        Ticket = db.Model._decl_class_registry.get('Ticket')
+                        for _ in range(item.quantity):
+                            ticket = Ticket(
+                                order_item_id=item.id,
+                                event_id=event.id,
+                                user_id=user_id,
+                                ticket_type_id=item.ticket_type_id,
+                                status="active" if is_free_mode() else "pending_payment",
+                                qr_data=build_ticket_qr_payload(
+                                    order_id=str(order.id),
+                                    event_id=str(event.id),
+                                    ticket_type_id=str(item.ticket_type_id),
+                                    user_id=str(user_id)
+                                )
                             )
-                        )
-                        db.session.add(ticket)
+                            db.session.add(ticket)
                     
                     # Update quantity sold
                     tt.quantity_sold = (tt.quantity_sold or 0) + qty

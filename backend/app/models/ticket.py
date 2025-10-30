@@ -43,8 +43,8 @@ class Ticket(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
-    order_item = db.relationship('OrderItem', backref=db.backref('tickets', lazy=True))
+    # Use string-based relationships to avoid circular imports
+    order_item = db.relationship('OrderItem', back_populates="tickets")
     event = db.relationship('Event')
     user = db.relationship('User')
     ticket_type = db.relationship('TicketType')
