@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from uuid import UUID as _UUID
 import json
+import traceback
 
 from flask import request, jsonify
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
