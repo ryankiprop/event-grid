@@ -32,84 +32,177 @@ def init_app(app):
     @app.route('/api/orders', methods=['POST'])
     @jwt_required()
     def create_order():
-        raw = request.get_json(silent=True) or {}
-
-        if not FREE_MODE:
-            return {
-                "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
-            }, 400
-        json_data = raw
-        errors = create_order_schema.validate(json_data)
-        if errors:
-            return {"errors": errors}, 400
-        user_id = _uuid(get_jwt_identity())
-        if not user_id:
-            return {"message": "Invalid token"}, 400
-        event_id = _uuid(json_data.get("event_id"))
-        if not event_id:
-            return {"message": "Invalid event id"}, 400
-        event = Event.query.get(event_id)
-        if not event:
-            return {"message": "Event not found"}, 404
-        # Build order
-        order = Order(user_id=user_id, event_id=event.id, total_amount=0, status="paid")
-        db.session.add(order)
-        db.session.flush()  # get order.id
-        total = 0
-        # Validate and reserve tickets
-        items_in = json_data.get("items", [])
-        if not items_in:
-            return {"message": "No items provided. Add at least one ticket."}, 400
-
-        item_errors = []
-        for idx, item in enumerate(items_in):
-            tt_id = _uuid(item.get("ticket_type_id"))
-            qty = int(item.get("quantity") or 0)
-            if not tt_id or qty <= 0:
-                item_errors.append({"index": idx, "message": "Invalid ticket item (ticket_type_id and positive quantity required)"})
-                continue
-            tt = TicketType.query.get(tt_id)
-            if not tt or tt.event_id != event.id:
-                item_errors.append({"index": idx, "message": "Ticket type not found for event"})
-                continue
-            if tt.quantity_available < qty:
-                item_errors.append({"index": idx, "message": f"Insufficient availability for {tt.name}"})
-                continue
-            line_total = tt.price * qty
-            total += line_total
-            oi = OrderItem(
-                order_id=order.id,
-                ticket_type_id=tt.id,
-                quantity=qty,
-                unit_price=tt.price,
-            )
-            db.session.add(oi)
-            db.session.flush()  # get oi.id
-            oi.qr_code = build_ticket_qr_payload(
-                order_id=order.id,
-                item_id=oi.id,
-                user_id=user_id,
-                event_id=event.id,
-                event_title=event.title,
-                event_start_date_iso=(event.start_date.isoformat() if getattr(event, "start_date", None) else None),
-                ticket_type_id=tt.id,
-                ticket_type_name=tt.name,
-            )
-            tt.quantity_sold = (tt.quantity_sold or 0) + qty
-
-        if item_errors and total == 0:
-            db.session.rollback()
-            return {"message": "No valid items in order", "errors": item_errors}, 400
-
-        order.total_amount = total
-        db.session.commit()
-        # Send confirmation (best-effort)
         try:
-            user = User.query.get(user_id)
-            send_order_confirmation(user, order)
-        except Exception:
-            pass
-        return {"order": order_schema.dump(order)}, 201
+            current_app.logger.info("Received order creation request")
+            raw = request.get_json(silent=True) or {}
+            current_app.logger.info(f"Request data: {raw}")
+
+            if not FREE_MODE:
+                return {
+                    "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
+                }, 400
+            json_data = raw
+            current_app.logger.info(f"Validating order data: {json_data}")
+            errors = create_order_schema.validate(json_data)
+            if errors:
+                current_app.logger.error(f"Validation errors: {errors}")
+                return {"message": "Invalid order data", "errors": errors}, 400
+            user_id = _uuid(get_jwt_identity())
+            if not user_id:
+                current_app.logger.error("Invalid user ID from token")
+                return {"message": "Invalid token"}, 400
+                
+            event_id = _uuid(json_data.get("event_id"))
+            if not event_id:
+                current_app.logger.error(f"Invalid event ID: {json_data.get('event_id')}")
+                return {"message": "Invalid event id"}, 400
+                
+            current_app.logger.info(f"Looking up event with ID: {event_id}")
+            event = Event.query.get(event_id)
+            if not event:
+                current_app.logger.error(f"Event not found: {event_id}")
+                return {"message": "Event not found"}, 404
+            current_app.logger.info(f"Creating order for user {user_id}, event {event_id}")
+            # Build order
+            order = Order(user_id=user_id, event_id=event.id, total_amount=0, status="paid")
+            db.session.add(order)
+            try:
+                db.session.flush()  # get order.id
+                current_app.logger.info(f"Created order with ID: {order.id}")
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Failed to create order: {str(e)}")
+                current_app.logger.error(traceback.format_exc())
+                return {"message": "Failed to create order", "error": str(e)}, 500
+            total = 0
+            # Validate and reserve tickets
+            items_in = json_data.get("items", [])
+            current_app.logger.info(f"Processing {len(items_in)} ticket items")
+            if not items_in:
+                current_app.logger.error("No items provided in order")
+                return {"message": "No items provided. Add at least one ticket."}, 400
+
+            item_errors = []
+            for idx, item in enumerate(items_in):
+                try:
+                    tt_id_str = item.get("ticket_type_id")
+                    current_app.logger.info(f"Processing item {idx}: ticket_type_id={tt_id_str}")
+                    
+                    tt_id = _uuid(tt_id_str)
+                    qty = int(item.get("quantity") or 0)
+                    
+                    if not tt_id or qty <= 0:
+                        error_msg = f"Invalid ticket item at index {idx}: ticket_type_id={tt_id_str}, quantity={qty}"
+                        current_app.logger.error(error_msg)
+                        item_errors.append({"index": idx, "message": "Invalid ticket item (ticket_type_id and positive quantity required)"})
+                        continue
+                        
+                    current_app.logger.info(f"Looking up ticket type: {tt_id}")
+                    tt = TicketType.query.get(tt_id)
+                    
+                    if not tt:
+                        error_msg = f"Ticket type not found: {tt_id}"
+                        current_app.logger.error(error_msg)
+                        item_errors.append({"index": idx, "message": "Ticket type not found"})
+                        continue
+                        
+                    if tt.event_id != event.id:
+                        error_msg = f"Ticket type {tt_id} does not belong to event {event.id}"
+                        current_app.logger.error(error_msg)
+                        item_errors.append({"index": idx, "message": "Ticket type not found for event"})
+                        continue
+                        
+                    available = tt.quantity_available - (tt.quantity_sold or 0)
+                    current_app.logger.info(f"Ticket type {tt_id} - Available: {available}, Requested: {qty}")
+                    
+                    if available < qty:
+                        error_msg = f"Insufficient availability for {tt.name}: {available} available, {qty} requested"
+                        current_app.logger.error(error_msg)
+                        item_errors.append({"index": idx, "message": f"Insufficient availability for {tt.name}"})
+                        continue
+                        
+                except Exception as e:
+                    error_msg = f"Error processing ticket item {idx}: {str(e)}"
+                    current_app.logger.error(error_msg)
+                    current_app.logger.error(traceback.format_exc())
+                    item_errors.append({"index": idx, "message": f"Error processing ticket: {str(e)}"})
+                    continue
+                try:
+                    line_total = tt.price * qty
+                    total += line_total
+                    current_app.logger.info(f"Creating order item: ticket_type_id={tt.id}, quantity={qty}, price={tt.price}")
+                    
+                    oi = OrderItem(
+                        order_id=order.id,
+                        ticket_type_id=tt.id,
+                        quantity=qty,
+                        unit_price=tt.price,
+                    )
+                    db.session.add(oi)
+                    db.session.flush()  # get oi.id
+                    
+                    current_app.logger.info(f"Order item created with ID: {oi.id}")
+                    
+                    # Build QR code payload
+                    qr_payload = build_ticket_qr_payload(
+                        order_id=order.id,
+                        item_id=oi.id,
+                        user_id=user_id,
+                        event_id=event.id,
+                        event_title=event.title,
+                        event_start_date_iso=(event.start_date.isoformat() if getattr(event, "start_date", None) else None),
+                        ticket_type_id=tt.id,
+                        ticket_type_name=tt.name,
+                    )
+                    oi.qr_code = qr_payload
+                    
+                    # Update quantity sold
+                    tt.quantity_sold = (tt.quantity_sold or 0) + qty
+                    current_app.logger.info(f"Updated quantity sold for ticket type {tt.id}: {tt.quantity_sold}")
+                    
+                except Exception as e:
+                    db.session.rollback()
+                    error_msg = f"Failed to create order item: {str(e)}"
+                    current_app.logger.error(error_msg)
+                    current_app.logger.error(traceback.format_exc())
+                    item_errors.append({"index": idx, "message": f"Failed to process ticket: {str(e)}"})
+
+            if item_errors:
+                db.session.rollback()
+                current_app.logger.error(f"Order processing failed with {len(item_errors)} errors")
+                return {"message": "Failed to process order", "errors": item_errors}, 400
+
+            # Update order total and commit
+            order.total_amount = total
+            try:
+                current_app.logger.info(f"Committing order with total: {total}")
+                db.session.commit()
+                current_app.logger.info(f"Order {order.id} created successfully")
+                
+                # Send confirmation email (best-effort)
+                user = User.query.get(user_id)
+                if user and user.email:
+                    try:
+                        current_app.logger.info(f"Sending order confirmation to {user.email}")
+                        send_order_confirmation(user, order)
+                    except Exception as e:
+                        current_app.logger.error(f"Failed to send order confirmation email: {e}")
+                
+                return {"order": order_schema.dump(order)}, 201
+                
+            except Exception as e:
+                db.session.rollback()
+                error_msg = f"Failed to commit order: {str(e)}"
+                current_app.logger.error(error_msg)
+                current_app.logger.error(traceback.format_exc())
+                return {"message": "Failed to process order", "error": str(e)}, 500
+                
+        except Exception as e:
+            db.session.rollback()
+            error_msg = f"Unexpected error in create_order: {str(e)}"
+            current_app.logger.error(error_msg)
+            current_app.logger.error(traceback.format_exc())
+            return {"message": "An unexpected error occurred", "error": str(e)}, 500
 
     @app.route('/api/orders/user', methods=['GET'])
     @jwt_required()
