@@ -1,15 +1,21 @@
 from uuid import UUID as _UUID
-from flask import request, current_app
+
+from flask import current_app, request
+from flask_jwt_extended import (
+    get_jwt,
+    get_jwt_identity,
+    jwt_required,
+    verify_jwt_in_request,
+)
 from flask_restful import Resource
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from sqlalchemy import or_
+
 from ..extensions import db
 from ..models import Event
-from ..models.ticket import TicketType
 from ..models.order import Order, OrderItem
-from ..schemas.event_schema import EventSchema, EventCreateSchema, EventUpdateSchema
+from ..models.ticket import TicketType
+from ..schemas.event_schema import EventCreateSchema, EventSchema, EventUpdateSchema
 from ..utils.pagination import get_pagination_params
-
 
 event_schema = EventSchema()
 events_schema = EventSchema(many=True)
@@ -28,8 +34,8 @@ class EventsListResource(Resource):
     def get(self):
         try:
             page, per_page = get_pagination_params()
-            q = (request.args.get('q') or '').strip()
-            mine = (request.args.get('mine') or '').lower() in ('1', 'true', 'yes')
+            q = (request.args.get("q") or "").strip()
+            mine = (request.args.get("mine") or "").lower() in ("1", "true", "yes")
             query = Event.query
             if q:
                 like = f"%{q}%"
@@ -45,11 +51,11 @@ class EventsListResource(Resource):
                 try:
                     verify_jwt_in_request()
                     claims = get_jwt()
-                    role = claims.get('role')
+                    role = claims.get("role")
                     uid = _parse_uuid(get_jwt_identity())
-                    if role == 'admin':
+                    if role == "admin":
                         pass
-                    elif role == 'organizer' and uid:
+                    elif role == "organizer" and uid:
                         query = query.filter(Event.organizer_id == uid)
                     else:
                         query = query.filter(False)
@@ -64,16 +70,22 @@ class EventsListResource(Resource):
                 claims = {}
             current_app.logger.info(
                 "events.list q=%s mine=%s page=%s per_page=%s total=%s user=%s role=%s",
-                q, mine, page, per_page, paginated.total, get_jwt_identity() if claims else None, (claims or {}).get('role')
+                q,
+                mine,
+                page,
+                per_page,
+                paginated.total,
+                get_jwt_identity() if claims else None,
+                (claims or {}).get("role"),
             )
             return {
-                'items': data,
-                'meta': {
-                    'page': paginated.page,
-                    'per_page': paginated.per_page,
-                    'total': paginated.total,
-                    'pages': paginated.pages,
-                }
+                "items": data,
+                "meta": {
+                    "page": paginated.page,
+                    "per_page": paginated.per_page,
+                    "total": paginated.total,
+                    "pages": paginated.pages,
+                },
             }, 200
         except Exception as e:
             current_app.logger.exception("events.list failed")
@@ -82,29 +94,31 @@ class EventsListResource(Resource):
     @jwt_required()
     def post(self):
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         organizer_id = _parse_uuid(get_jwt_identity())
-        if role not in ('organizer', 'admin'):
+        if role not in ("organizer", "admin"):
             return {"message": "Forbidden"}, 403
         json_data = request.get_json() or {}
         errors = event_create_schema.validate(json_data)
         if errors:
             return {"errors": errors}, 400
         ev = Event(
-            title=json_data['title'],
-            description=json_data.get('description'),
-            category=json_data.get('category'),
-            venue_name=json_data.get('venue_name'),
-            address=json_data.get('address'),
-            start_date=json_data['start_date'],
-            end_date=json_data['end_date'],
-            banner_image_url=json_data.get('banner_image_url'),
-            is_published=bool(json_data.get('is_published')),
+            title=json_data["title"],
+            description=json_data.get("description"),
+            category=json_data.get("category"),
+            venue_name=json_data.get("venue_name"),
+            address=json_data.get("address"),
+            start_date=json_data["start_date"],
+            end_date=json_data["end_date"],
+            banner_image_url=json_data.get("banner_image_url"),
+            is_published=bool(json_data.get("is_published")),
             organizer_id=organizer_id,
         )
         db.session.add(ev)
         db.session.commit()
-        current_app.logger.info("events.create id=%s by user=%s role=%s", ev.id, get_jwt_identity(), role)
+        current_app.logger.info(
+            "events.create id=%s by user=%s role=%s", ev.id, get_jwt_identity(), role
+        )
         return {"event": event_schema.dump(ev)}, 201
 
 
@@ -127,21 +141,35 @@ class EventResource(Resource):
         if not ev:
             return {"message": "Not found"}, 404
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _parse_uuid(get_jwt_identity())
-        if role != 'admin' and (not uid or ev.organizer_id != uid):
+        if role != "admin" and (not uid or ev.organizer_id != uid):
             return {"message": "Forbidden"}, 403
         json_data = request.get_json() or {}
         errors = event_update_schema.validate(json_data)
         if errors:
             return {"errors": errors}, 400
         for field in (
-            'title','description','category','venue_name','address','start_date','end_date','banner_image_url','is_published'
+            "title",
+            "description",
+            "category",
+            "venue_name",
+            "address",
+            "start_date",
+            "end_date",
+            "banner_image_url",
+            "is_published",
         ):
             if field in json_data:
                 setattr(ev, field, json_data[field])
         db.session.commit()
-        current_app.logger.info("events.update id=%s by user=%s role=%s fields=%s", ev.id, get_jwt_identity(), role, list(json_data.keys()))
+        current_app.logger.info(
+            "events.update id=%s by user=%s role=%s fields=%s",
+            ev.id,
+            get_jwt_identity(),
+            role,
+            list(json_data.keys()),
+        )
         return {"event": event_schema.dump(ev)}, 200
 
     @jwt_required()
@@ -153,9 +181,9 @@ class EventResource(Resource):
         if not ev:
             return {"message": "Not found"}, 404
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _parse_uuid(get_jwt_identity())
-        if role != 'admin' and (not uid or ev.organizer_id != uid):
+        if role != "admin" and (not uid or ev.organizer_id != uid):
             return {"message": "Forbidden"}, 403
 
         # Delete related records first to avoid foreign key constraints
@@ -169,7 +197,9 @@ class EventResource(Resource):
         # Now delete the event
         db.session.delete(ev)
         db.session.commit()
-        current_app.logger.info("events.delete id=%s by user=%s role=%s", event_id, get_jwt_identity(), role)
+        current_app.logger.info(
+            "events.delete id=%s by user=%s role=%s", event_id, get_jwt_identity(), role
+        )
         return {"message": "Deleted"}, 200
 
 
@@ -184,9 +214,9 @@ class EventStatsResource(Resource):
             return {"message": "Not found"}, 404
 
         claims = get_jwt()
-        role = claims.get('role')
+        role = claims.get("role")
         uid = _parse_uuid(get_jwt_identity())
-        if role != 'admin' and (not uid or ev.organizer_id != uid):
+        if role != "admin" and (not uid or ev.organizer_id != uid):
             return {"message": "Forbidden"}, 403
 
         # Compute totals
@@ -197,7 +227,9 @@ class EventStatsResource(Resource):
 
         orders_q = Order.query.filter_by(event_id=eid)
         orders_count = orders_q.count()
-        revenue_cents = sum((o.total_amount or 0) for o in orders_q if (o.status or 'paid') == 'paid')
+        revenue_cents = sum(
+            (o.total_amount or 0) for o in orders_q if (o.status or "paid") == "paid"
+        )
 
         return {
             "stats": {

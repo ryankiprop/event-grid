@@ -8,7 +8,7 @@ import { initiateMpesa, getPayment } from '../../services/payments'
 import { useAuth } from '../../context/AuthContext'
 import TicketManager from '../../components/events/TicketManager'
 
-export default function EventDetails() {
+export default function EventDetails () {
   const { id } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -21,7 +21,6 @@ export default function EventDetails() {
   const [ticketTypes, setTicketTypes] = useState([])
   const [phone, setPhone] = useState('')
   const [mpesaPending, setMpesaPending] = useState(false)
-  const [mpesaPaymentId, setMpesaPaymentId] = useState(null)
 
   useEffect(() => {
     let mounted = true
@@ -41,8 +40,8 @@ export default function EventDetails() {
   }, [id])
 
   if (loading) return <LoadingSpinner />
-  if (error) return <div className="max-w-4xl mx-auto p-4 text-red-600">{error}</div>
-  if (!event) return <div className="max-w-4xl mx-auto p-4">Event not found</div>
+  if (error) return <div className='max-w-4xl mx-auto p-4 text-red-600'>{error}</div>
+  if (!event) return <div className='max-w-4xl mx-auto p-4'>Event not found</div>
 
   const totalCents = (cartItems || []).reduce((sum, it) => {
     const tt = ticketTypes?.find(t => t.id === it.ticket_type_id)
@@ -118,49 +117,49 @@ export default function EventDetails() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto p-4">
-        <div className="mb-4"><Link to="/events" className="text-primary-600">← Back to events</Link></div>
-        <div className="bg-white rounded shadow overflow-hidden">
+    <div className='min-h-screen bg-gray-50'>
+      <div className='max-w-4xl mx-auto p-4'>
+        <div className='mb-4'><Link to='/events' className='text-primary-600'>← Back to events</Link></div>
+        <div className='bg-white rounded shadow overflow-hidden'>
           {event.banner_image_url && (
-            <img src={event.banner_image_url} alt={event.title} className="w-full h-64 object-cover" />
+            <img src={event.banner_image_url} alt={event.title} className='w-full h-64 object-cover' />
           )}
-          <div className="p-6">
-            <h1 className="text-2xl font-semibold mb-2">{event.title}</h1>
-            <div className="text-sm text-gray-600 mb-4">
-              {event.venue_name && <span className="mr-2">{event.venue_name}</span>}
-              {event.category && <span className="px-2 py-0.5 bg-gray-100 rounded">{event.category}</span>}
+          <div className='p-6'>
+            <h1 className='text-2xl font-semibold mb-2'>{event.title}</h1>
+            <div className='text-sm text-gray-600 mb-4'>
+              {event.venue_name && <span className='mr-2'>{event.venue_name}</span>}
+              {event.category && <span className='px-2 py-0.5 bg-gray-100 rounded'>{event.category}</span>}
             </div>
-            {event.description && <p className="leading-relaxed text-gray-800 whitespace-pre-line mb-6">{event.description}</p>}
+            {event.description && <p className='leading-relaxed text-gray-800 whitespace-pre-line mb-6'>{event.description}</p>}
 
-            <div className="border-t pt-4">
-              <h2 className="text-lg font-semibold mb-2">Tickets</h2>
+            <div className='border-t pt-4'>
+              <h2 className='text-lg font-semibold mb-2'>Tickets</h2>
               <TicketSelector eventId={event.id} onChange={(items, tickets) => { setCartItems(items); setTicketTypes(tickets || []) }} />
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-lg font-medium">Total KES {totalCents/100}</div>
-                <div className="flex items-center gap-2">
+              <div className='flex items-center justify-between mt-4'>
+                <div className='text-lg font-medium'>Total KES {totalCents / 100}</div>
+                <div className='flex items-center gap-2'>
                   {import.meta.env.VITE_ENABLE_FREE_CHECKOUT === 'true' && (
-                    <button onClick={onPurchase} disabled={submitting || mpesaPending} className="bg-gray-200 text-gray-800 px-4 py-2 rounded">
+                    <button onClick={onPurchase} disabled={submitting || mpesaPending} className='bg-gray-200 text-gray-800 px-4 py-2 rounded'>
                       {submitting ? 'Processing…' : 'Free Checkout (dev)'}
                     </button>
                   )}
                   <input
-                    className="border rounded px-3 py-2 w-56"
-                    placeholder="2547XXXXXXXX"
+                    className='border rounded px-3 py-2 w-56'
+                    placeholder='2547XXXXXXXX'
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                   />
-                  <button onClick={onPayMpesa} disabled={mpesaPending} className="bg-primary-600 text-white px-4 py-2 rounded">
+                  <button onClick={onPayMpesa} disabled={mpesaPending} className='bg-primary-600 text-white px-4 py-2 rounded'>
                     {mpesaPending ? 'Waiting for M-Pesa…' : 'Pay with M-Pesa'}
                   </button>
                 </div>
               </div>
-              {status?.err && <div className="text-red-600 mt-2">{status.err}</div>}
-              {status?.ok && <div className="text-green-700 mt-2">{status.ok}</div>}
+              {status?.err && <div className='text-red-600 mt-2'>{status.err}</div>}
+              {status?.ok && <div className='text-green-700 mt-2'>{status.ok}</div>}
             </div>
 
             {(user?.role === 'admin' || (user?.role === 'organizer' && user?.id === event.organizer_id)) && (
-              <div className="mt-8 border-t pt-4">
+              <div className='mt-8 border-t pt-4'>
                 <TicketManager eventId={event.id} />
               </div>
             )}
