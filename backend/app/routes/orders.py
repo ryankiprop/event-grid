@@ -2,9 +2,9 @@ import os
 from datetime import datetime
 from uuid import UUID as _UUID
 
-from flask import request
+from flask import Blueprint, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
-from flask_restful import Resource
+from flask_restful import Api, Resource
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
@@ -202,9 +202,9 @@ class MarkCheckinResource(Resource):
 
         claims = get_jwt()
         role = claims.get("role")
-        uid = _uuid(get_jwt_identity())
+        user_id = _uuid(get_jwt_identity())
 
-        # Only organizers/admins can check in for their events
+        # Only organizers/admins can mark check-ins
         if role not in ("organizer", "admin"):
             return {"message": "Forbidden"}, 403
 
@@ -220,25 +220,32 @@ class MarkCheckinResource(Resource):
             return {"message": "Invalid code"}, 404
 
         # Check if user has permission for this event
-        if role == "organizer" and oi.order.event.organizer_id != uid:
+        if role == "organizer" and oi.order.event.organizer_id != user_id:
             return {"message": "Forbidden"}, 403
 
-        if oi.checked_in:
-            return {"message": "Already checked in", "already": True}, 400
-
-        oi.checked_in = True
+        # Toggle check-in status
+        oi.checked_in = not oi.checked_in
         oi.checked_in_at = datetime.utcnow()
-        oi.checked_in_by = uid
+        oi.checked_in_by = user_id
         db.session.commit()
 
         return {
-            "message": "Checked in successfully",
-            "order_item": {
-                "id": str(oi.id),
-                "checked_in": True,
-                "checked_in_at": (
-                    oi.checked_in_at.isoformat() if oi.checked_in_at else None
-                ),
-                "checked_in_by": str(oi.checked_in_by) if oi.checked_in_by else None,
-            },
+            "message": "Check-in status updated",
+            "order_id": str(oi.order.id),
+            "ticket_id": str(oi.id),
+            "checked_in": oi.checked_in,
+            "checked_in_at": oi.checked_in_at.isoformat() if oi.checked_in_at else None,
         }, 200
+
+
+# Create the orders blueprint
+orders_bp = Blueprint('orders', __name__)
+api = Api(orders_bp)
+
+# Add resources to the API
+api.add_resource(OrdersResource, '/orders')
+api.add_resource(UserOrdersResource, '/orders/me')
+api.add_resource(OrderDetailResource, '/orders/<string:order_id>')
+api.add_resource(EventOrdersResource, '/events/<string:event_id>/orders')
+api.add_resource(VerifyCheckinResource, '/verify-checkin')
+api.add_resource(MarkCheckinResource, '/checkin')

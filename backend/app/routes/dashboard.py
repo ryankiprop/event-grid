@@ -1,7 +1,8 @@
 from uuid import UUID as _UUID
 
+from flask import Blueprint
 from flask_jwt_extended import get_jwt, jwt_required
-from flask_restful import Resource
+from flask_restful import Api, Resource
 
 from ..extensions import db
 from ..models import Event, Order, User
@@ -54,3 +55,12 @@ class AdminDashboardResource(Resource):
             }, 200
         except Exception as e:
             return {"message": str(e)}, 500
+
+
+# Create the dashboard blueprint
+dashboard_bp = Blueprint('dashboard', __name__)
+api = Api(dashboard_bp)
+
+# Add resources to the API
+api.add_resource(OrganizerDashboardResource, '/organizer')
+api.add_resource(AdminDashboardResource, '/admin')

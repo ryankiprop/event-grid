@@ -1,9 +1,9 @@
 import json
 from uuid import UUID as _UUID
 
-from flask import current_app, request
+from flask import Blueprint, current_app, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
-from flask_restful import Resource
+from flask_restful import Api, Resource
 
 from ..extensions import db
 from ..models import Event, Order, OrderItem, TicketType
@@ -221,3 +221,14 @@ class MpesaTestEnvResource(Resource):
             "MPESA_CALLBACK_URL": os.getenv("MPESA_CALLBACK_URL"),
         }
         return env_vars, 200
+
+
+# Create the payments blueprint
+payments_bp = Blueprint('payments', __name__)
+api = Api(payments_bp)
+
+# Add resources to the API
+api.add_resource(MpesaInitiateResource, '/mpesa/initiate')
+api.add_resource(PaymentStatusResource, '/status/<string:payment_id>')
+api.add_resource(MpesaCallbackResource, '/mpesa/callback')
+api.add_resource(MpesaTestEnvResource, '/mpesa/test-env')

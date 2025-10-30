@@ -1,8 +1,8 @@
 from uuid import UUID as _UUID
 
-from flask import request
+from flask import Blueprint, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
-from flask_restful import Resource
+from flask_restful import Api, Resource
 
 from ..extensions import db
 from ..models import Event, TicketType
@@ -111,3 +111,12 @@ class TicketTypeResource(Resource):
         db.session.delete(tt)
         db.session.commit()
         return {"message": "Deleted"}, 200
+
+
+# Create the tickets blueprint
+tickets_bp = Blueprint('tickets', __name__)
+api = Api(tickets_bp)
+
+# Add resources to the API
+api.add_resource(EventTicketsResource, '/events/<string:event_id>/tickets')
+api.add_resource(TicketTypeResource, '/events/<string:event_id>/tickets/<string:ticket_id>')

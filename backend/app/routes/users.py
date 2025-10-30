@@ -1,8 +1,8 @@
 from uuid import UUID as _UUID
 
-from flask import request
+from flask import Blueprint, request
 from flask_jwt_extended import get_jwt, jwt_required
-from flask_restful import Resource
+from flask_restful import Api, Resource
 
 from ..extensions import db
 from ..models import User
@@ -50,3 +50,12 @@ class UserRoleResource(Resource):
         user.role = new_role
         db.session.commit()
         return {"user": user_schema.dump(user)}, 200
+
+
+# Create the users blueprint
+users_bp = Blueprint('users', __name__)
+api = Api(users_bp)
+
+# Add resources to the API
+api.add_resource(UsersListResource, '')
+api.add_resource(UserRoleResource, '/<string:user_id>/role')

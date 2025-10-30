@@ -1,6 +1,6 @@
-from flask import current_app, request
+from flask import Blueprint, current_app, request
 from flask_jwt_extended import get_jwt, jwt_required
-from flask_restful import Resource
+from flask_restful import Api, Resource
 
 from ..extensions import db
 from ..models import Media
@@ -58,6 +58,13 @@ class ImageUploadResource(Resource):
             }, 201
             
         except Exception as e:
-            current_app.logger.exception("Image upload failed")
-            db.session.rollback()
-            return {"message": f"Failed to process image: {str(e)}"}, 500
+            current_app.logger.error(f"Failed to process image upload: {str(e)}")
+            return {"message": "Failed to process image"}, 500
+
+
+# Create the uploads blueprint
+uploads_bp = Blueprint('uploads', __name__)
+api = Api(uploads_bp)
+
+# Add resources to the API
+api.add_resource(ImageUploadResource, '/images')
