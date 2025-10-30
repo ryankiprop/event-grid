@@ -17,7 +17,7 @@ from .extensions import db, jwt, migrate
 from .models.payment import Payment
 
 # Import API after app to avoid circular imports
-from .api import api, init_app as init_api
+from .api import init_app as init_api
 
 def create_app():
     app = Flask(__name__)
