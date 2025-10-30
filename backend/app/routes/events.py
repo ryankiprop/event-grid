@@ -69,10 +69,15 @@ def init_app(app):
     @app.route('/api/events', methods=['GET'])
     def get_events():
         try:
+            # Get pagination parameters
             page, per_page = get_pagination_params()
             q = (request.args.get("q") or "").strip()
             mine = (request.args.get("mine") or "").lower() in ("1", "true", "yes")
+            
+            # Initialize query
             query = Event.query
+            
+            # Apply search filter if query parameter is provided
             if q:
                 like = f"%{q}%"
                 query = query.filter(
@@ -83,49 +88,89 @@ def init_app(app):
                         Event.address.ilike(like),
                     )
                 )
+            
+            # Apply user-specific filters if mine=true
             if mine:
                 try:
                     verify_jwt_in_request()
                     claims = get_jwt()
                     role = claims.get("role")
                     uid = _parse_uuid(get_jwt_identity())
+                    
                     if role == "admin":
+                        # Admin can see all events when mine=true
                         pass
                     elif role == "organizer" and uid:
+                        # Organizer can only see their own events
                         query = query.filter(Event.organizer_id == uid)
                     else:
-                        query = query.filter(False)
-                except Exception:
-                    query = query.filter(False)
+                        # Regular users see nothing when mine=true
+                        return {
+                            "items": [],
+                            "meta": {
+                                "page": 1,
+                                "per_page": per_page,
+                                "total": 0,
+                                "pages": 0,
+                            }
+                        }, 200
+                except Exception as e:
+                    current_app.logger.warning("Failed to verify JWT for mine filter: %s", str(e))
+                    return {
+                        "items": [],
+                        "meta": {
+                            "page": 1,
+                            "per_page": per_page,
+                            "total": 0,
+                            "pages": 0,
+                        }
+                    }, 200
+            
+            # Order by start date (newest first)
             query = query.order_by(Event.start_date.desc())
+            
+            # Execute paginated query
             paginated = query.paginate(page=page, per_page=per_page, error_out=False)
-            data = events_schema.dump(paginated.items)
+            
+            # Get JWT claims for logging (if available)
             try:
                 claims = get_jwt()
+                user_id = get_jwt_identity()
+                role = claims.get("role")
             except Exception:
                 claims = {}
+                user_id = None
+                role = None
+            
+            # Log the request
             current_app.logger.info(
-                "events.list q=%s mine=%s page=%s per_page=%s total=%s user=%s role=%s",
+                "events.list q='%s' mine=%s page=%s per_page=%s total=%s user=%s role=%s",
                 q,
                 mine,
                 page,
                 per_page,
                 paginated.total,
-                get_jwt_identity() if claims else None,
-                (claims or {}).get("role"),
+                user_id,
+                role,
             )
+            
+            # Return paginated response
             return {
-                "items": data,
+                "items": events_schema.dump(paginated.items),
                 "meta": {
                     "page": paginated.page,
                     "per_page": paginated.per_page,
                     "total": paginated.total,
                     "pages": paginated.pages,
-                },
+                }
             }, 200
+            
         except Exception as e:
-            current_app.logger.exception("events.list failed")
-            return {"message": "Internal Server Error"}, 500
+            current_app.logger.exception("Failed to fetch events: %s", str(e))
+            return {
+                "message": "Failed to fetch events. Please try again later.",
+                "error": str(e)
+            }, 500
 
     @app.route('/api/events', methods=['POST'])
     @jwt_required()
