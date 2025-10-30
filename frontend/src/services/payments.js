@@ -6,21 +6,39 @@ export const initiateMpesa = async (payload) => {
     throw new Error('No ticket items provided')
   }
 
-  // Validate ticket type IDs
+  // Validate ticket type IDs and calculate total amount
+  let totalAmount = 0;
   const tickets = payload.items.map(item => {
     if (!item.ticket_type_id) {
       throw new Error('Invalid ticket type ID')
     }
+    if (!item.price || isNaN(item.price) || item.price < 0) {
+      throw new Error('Invalid ticket price')
+    }
+    const quantity = parseInt(item.quantity) || 1
+    totalAmount += item.price * quantity
+    
     return {
       ticket_type_id: item.ticket_type_id,
-      quantity: item.quantity || 1
+      quantity: quantity
     }
   })
 
+  // Format phone number if needed
+  let phone = (payload.phone || '').trim()
+  if (phone.startsWith('0')) {
+    phone = '254' + phone.substring(1)
+  } else if (phone.startsWith('+254')) {
+    phone = phone.substring(1)
+  } else if (!phone.startsWith('254')) {
+    phone = '254' + phone
+  }
+
   const transformedPayload = {
     event_id: payload.event_id,
-    phone: payload.phone,
-    tickets: tickets
+    phone: phone,
+    tickets: tickets,
+    amount: totalAmount
   }
   
   console.log('Sending M-Pesa payment request:', transformedPayload)

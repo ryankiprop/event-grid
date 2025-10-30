@@ -10,7 +10,8 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
       // Create order items array for the backend
       const orderItems = cart.map(item => ({
         ticket_type_id: item.id,
-        quantity: item.quantity
+        quantity: item.quantity,
+        price: item.price || 0  // Include price for validation
       }));
 
       // Get event ID from the first item in cart
@@ -23,16 +24,19 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
       const response = await api.post('/orders', {
         event_id: eventId,
         items: orderItems,
-        payment_method: 'free'
+        payment_method: 'free',
+        amount: total,  // Include total amount for validation
+        currency: 'KES' // Include currency for consistency
       });
 
-      const { order } = response.data;
+      const order = response.data;
       
       if (order) {
         toast.success('Registration completed successfully!');
         if (onSuccess) {
           onSuccess({ order_id: order.id });
         }
+        // Redirect to confirmation page with order ID
         navigate(`/orders/${order.id}/confirmation`);
       }
     } catch (error) {

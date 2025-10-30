@@ -30,12 +30,15 @@ def init_app(app):
     @app.route('/api/orders', methods=['POST'])
     @jwt_required()
     def create_order():
-        if not FREE_MODE:
+        data = request.get_json() or {}
+        
+        # Skip FREE_MODE check if payment_method is 'free'
+        payment_method = data.get('payment_method', '').lower()
+        if not FREE_MODE and payment_method != 'free':
             return jsonify({
                 "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
             }), 400
             
-        data = request.get_json() or {}
         errors = create_order_schema.validate(data)
         if errors:
             return jsonify({"errors": errors}), 400
@@ -57,7 +60,7 @@ def init_app(app):
             user_id=user_id, 
             event_id=event.id, 
             total_amount=0, 
-            status="pending" if not FREE_MODE else "paid"
+            status="paid" if payment_method == 'free' else "pending"
         )
         db.session.add(order)
         db.session.flush()  # get order.id
@@ -104,16 +107,29 @@ def init_app(app):
                 tt.quantity_sold = (tt.quantity_sold or 0) + qty
         
         order.total_amount = total
+        
+        is_free_checkout = payment_method == 'free'
+        payment = Payment(
+            order_id=order.id,
+            amount=0 if is_free_checkout else total,
+            provider='free' if is_free_checkout else 'mpesa',
+            status='completed' if is_free_checkout else 'pending',
+            currency='KES',
+            payment_method=payment_method or 'mpesa'
+        )
+        db.session.add(payment)
+        
         db.session.commit()
         
-        # Send confirmation email (best-effort)
+        # Send confirmation email
         try:
             user = User.query.get(user_id)
-            send_order_confirmation(user, order)
+            if user and user.email:
+                send_order_confirmation(user.email, order)
         except Exception as e:
-            app.logger.error(f"Failed to send order confirmation: {str(e)}")
-            
-        return jsonify({"order": order_schema.dump(order)}), 201
+            app.logger.error(f"Failed to send confirmation email: {str(e)}")
+        
+        return jsonify(order_schema.dump(order)), 201
 
     @app.route('/api/orders/user', methods=['GET'])
     @jwt_required()
