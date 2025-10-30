@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from ..extensions import db
 
@@ -43,11 +44,11 @@ class Ticket(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Use string-based relationships to avoid circular imports
-    order_item = db.relationship('OrderItem', back_populates="tickets")
-    event = db.relationship('Event')
-    user = db.relationship('User')
-    ticket_type = db.relationship('TicketType')
+    # String-based relationships to avoid circular imports
+    order_item = relationship('OrderItem', back_populates="tickets")
+    event = relationship('Event', foreign_keys=[event_id])
+    user = relationship('User', foreign_keys=[user_id])
+    ticket_type = relationship('TicketType', foreign_keys=[ticket_type_id])
     
     def __repr__(self):
         return f'<Ticket {self.id} - {self.status}>'

@@ -46,10 +46,18 @@ class OrderItem(db.Model):
     checked_in_at = db.Column(db.DateTime)
     checked_in_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"))
 
+    # String-based relationships to avoid circular imports
     ticket_type = db.relationship(
-        "TicketType", backref=db.backref("order_items", lazy=True)
+        "TicketType",
+        backref=db.backref("order_items", lazy=True)
     )
-    
-    # Use string-based relationship to avoid circular imports
-    tickets = db.relationship("Ticket", back_populates="order_item", lazy=True)
-    checked_in_by_user = db.relationship("User", foreign_keys=[checked_in_by])
+    tickets = db.relationship(
+        "Ticket",
+        back_populates="order_item",
+        lazy=True,
+        foreign_keys="[Ticket.order_item_id]"
+    )
+    checked_in_by_user = db.relationship(
+        "User",
+        foreign_keys=[checked_in_by]
+    )

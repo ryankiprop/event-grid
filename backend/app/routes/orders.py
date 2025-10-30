@@ -10,10 +10,12 @@ from sqlalchemy.orm import joinedload
 
 from ..extensions import db
 # Import models using string references to avoid circular imports
+from sqlalchemy.orm import lazyload
+
+# Import models using string references to avoid circular imports
 from ..models.event import Event
 from ..models.order import Order, OrderItem
 from ..models.user import User
-# Import TicketType and Ticket using string references where needed
 from ..schemas.order_schema import CreateOrderSchema, OrderSchema
 from ..utils.email import send_order_confirmation
 from ..utils.qrcode_util import build_ticket_qr_payload
@@ -172,26 +174,40 @@ def init_app(app):
                     )
                     oi.qr_code = qr_payload
                     
+                    # Import Ticket model here to avoid circular imports
+                    from ..models.ticket import Ticket
+            
                     # Create tickets for each order item
                     for item in order.items:
-                        # Use string-based reference to Ticket model
-                        Ticket = db.Model._decl_class_registry.get('Ticket')
-                        for _ in range(item.quantity):
-                            ticket = Ticket(
-                                order_item_id=item.id,
-                                event_id=event.id,
-                                user_id=user_id,
-                                ticket_type_id=item.ticket_type_id,
-                                status="active" if is_free_mode() else "pending_payment",
-                                qr_data=build_ticket_qr_payload(
-                                    order_id=str(order.id),
-                                    event_id=str(event.id),
-                                    ticket_type_id=str(item.ticket_type_id),
-                                    user_id=str(user_id)
+                        try:
+                            # Get ticket type to check availability
+                            ticket_type = db.session.query(TicketType).get(item.ticket_type_id)
+                            if not ticket_type:
+                                raise ValueError(f"Ticket type {item.ticket_type_id} not found")
+                                
+                            # Create tickets for the quantity ordered
+                            for _ in range(item.quantity):
+                                ticket = Ticket(
+                                    order_item_id=item.id,
+                                    event_id=event.id,
+                                    user_id=user_id,
+                                    ticket_type_id=item.ticket_type_id,
+                                    status="active" if is_free_mode() else "pending_payment",
+                                    qr_data=build_ticket_qr_payload(
+                                        order_id=str(order.id),
+                                        event_id=str(event.id),
+                                        ticket_type_id=str(item.ticket_type_id),
+                                        user_id=str(user_id)
+                                    )
                                 )
-                            )
-                            db.session.add(ticket)
-                    
+                                db.session.add(ticket)
+                                
+                        except Exception as e:
+                            db.session.rollback()
+                            current_app.logger.error(f"Error creating ticket: {str(e)}")
+                            current_app.logger.error(traceback.format_exc())
+                            raise
+                            
                     # Update quantity sold
                     tt.quantity_sold = (tt.quantity_sold or 0) + qty
                     current_app.logger.info(f"Updated quantity sold for ticket type {tt.id}: {tt.quantity_sold}")
