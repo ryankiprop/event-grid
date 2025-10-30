@@ -1,4 +1,9 @@
+import sys
 from uuid import UUID as _UUID
+
+# Prevent Flask-RESTful imports
+if 'flask_restful' in sys.modules:
+    raise ImportError('Flask-RESTful is not supported. Please remove all Flask-RESTful code.')
 
 from flask import current_app, request, jsonify
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required, verify_jwt_in_request
