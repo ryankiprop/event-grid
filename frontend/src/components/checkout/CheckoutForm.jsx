@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { createOrder } from '../../services/orders';
+import { v4 as uuidv4 } from 'uuid';
 
 const CheckoutForm = ({ cart, onSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -80,16 +81,85 @@ const CheckoutForm = ({ cart, onSuccess }) => {
           ))}
         </div>
 
-        <button
-          onClick={handleCheckout}
-          disabled={isLoading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded disabled:opacity-50"
-        >
-          {isLoading ? 'Processing...' : 'Get Tickets'}
-        </button>
+        <div className="space-y-3">
+          <button
+            onClick={handleCheckout}
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded disabled:opacity-50"
+          >
+            {isLoading ? 'Processing...' : 'Get Tickets'}
+          </button>
+          
+          {/* Fake Checkout Button for Testing */}
+          <button
+            onClick={handleFakeCheckout}
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded text-sm opacity-80 hover:opacity-100 transition-opacity"
+            title="Use this for testing without real payment"
+          >
+            [DEV] Fake Checkout (Testing Only)
+          </button>
+        </div>
       </div>
     </div>
   );
 };
+
+  // Handle fake checkout for testing
+  const handleFakeCheckout = async () => {
+    if (!cart || cart.length === 0) {
+      toast.error('Please select at least one ticket');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Generate a fake order ID
+      const fakeOrderId = `fake-order-${Date.now()}`;
+      
+      // Create a mock success response
+      const mockResponse = {
+        id: fakeOrderId,
+        status: 'completed',
+        message: 'Payment successful (test mode)',
+        order: {
+          id: fakeOrderId,
+          status: 'completed',
+          items: cart.map(item => ({
+            id: `fake-item-${uuidv4()}`,
+            ticket_type_id: item.ticket_type_id || item.id,
+            quantity: item.quantity,
+            name: item.name,
+            price: item.price || 0
+          })),
+          total: cart.reduce((sum, item) => sum + ((item.price || 0) * item.quantity), 0),
+          created_at: new Date().toISOString()
+        }
+      };
+
+      console.log('Fake checkout successful:', mockResponse);
+      
+      // Show success message
+      toast.success('Test payment successful!', {
+        autoClose: 3000,
+        closeOnClick: true,
+        pauseOnHover: true,
+      });
+
+      // Redirect to tickets dashboard after a short delay
+      setTimeout(() => {
+        navigate('/dashboard/tickets');
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Fake checkout error:', error);
+      toast.error('Test payment failed. ' + (error.message || ''));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
 export default CheckoutForm;
