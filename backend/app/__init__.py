@@ -52,37 +52,28 @@ def create_app():
         headers_enabled=True
     )
     
-    # CORS Configuration
-    CORS_ORIGINS = [
-        "https://event-grid-gilt.vercel.app",
-        "http://localhost:3000"  # For local development
-    ]
-    
-    # Configure CORS with all necessary settings
-    CORS(
-        app,
-        resources={
-            r"/*": {
-                "origins": CORS_ORIGINS,
-                "supports_credentials": True,
-                "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-                "expose_headers": ["Content-Range", "X-Total-Count"],
-                "max_age": 600  # Cache preflight requests for 10 minutes
-            }
-        },
-        supports_credentials=True,
-        automatic_options=True
-    )
-    
-    # Add security headers to all responses
+    # Simple CORS configuration - handle everything in one place
     @app.after_request
-    def add_security_headers(response):
-        # Security headers
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-        response.headers['X-XSS-Protection'] = '1; mode=block'
-        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    def add_cors_headers(response):
+        allowed_origins = [
+            'https://event-grid-gilt.vercel.app',
+            'http://localhost:3000'
+        ]
+        
+        origin = request.headers.get('Origin')
+        if origin in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Range, X-Total-Count'
+            
+            # Security headers
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+            response.headers['X-XSS-Protection'] = '1; mode=block'
+            response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
         return response
     
     # Initialize database and migrations

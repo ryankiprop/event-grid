@@ -1,10 +1,13 @@
 from uuid import UUID as _UUID
+from functools import wraps
 
-from flask import request, jsonify
-from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from flask import request, jsonify, current_app
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required, verify_jwt_in_request
 
 from ..extensions import db
-from ..models import Event, TicketType, OrderItem
+from ..models.event import Event
+from ..models.ticket import TicketType
+from ..models.order import OrderItem
 from ..schemas.ticket_schema import (
     TicketTypeCreateSchema,
     TicketTypeSchema,
@@ -15,6 +18,18 @@ ticket_schema = TicketTypeSchema()
 tickets_schema = TicketTypeSchema(many=True)
 ticket_create_schema = TicketTypeCreateSchema()
 ticket_update_schema = TicketTypeUpdateSchema()
+
+def role_required(required_role):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            verify_jwt_in_request()
+            claims = get_jwt()
+            if claims.get('role') != required_role:
+                return jsonify({"message": "Insufficient permissions"}), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 def _uuid(v):
     try:
