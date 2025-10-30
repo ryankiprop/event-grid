@@ -1,15 +1,14 @@
-from flask import request, current_app
+from flask import current_app, request, jsonify
 from flask_jwt_extended import get_jwt, jwt_required
-from flask_restful import Resource
 
 from ..extensions import db
-from ..models import Media
+from ..models.media import Media
 from ..utils.cloudinary import upload_image
 
-
-class ImageUploadResource(Resource):
+def init_app(app):
+    @app.route('/api/uploads/image', methods=['POST'])
     @jwt_required()
-    def post(self):
+    def upload_image_route():
         try:
             claims = get_jwt()
             user_id = claims.get("sub")
@@ -17,27 +16,27 @@ class ImageUploadResource(Resource):
             
             # Verify user has permission to upload
             if role not in ("organizer", "admin"):
-                return {"message": "Forbidden"}, 403
+                return jsonify({"message": "Forbidden"}), 403
                 
             # Check if the post request has the file part
             if 'image' not in request.files:
-                return {"message": "No image part in the request"}, 400
+                return jsonify({"message": "No image part in the request"}), 400
                 
             file = request.files['image']
             
             # If user does not select file, browser also
             # submit an empty part without filename
             if file.filename == '':
-                return {"message": "No selected file"}, 400
+                return jsonify({"message": "No selected file"}), 400
                 
             if not file:
-                return {"message": "Invalid file"}, 400
+                return jsonify({"message": "Invalid file"}), 400
                 
             # Upload to Cloudinary
             url = upload_image(file)
             
             if not url:
-                return {"message": "Failed to upload image to Cloudinary"}, 500
+                return jsonify({"message": "Failed to upload image to Cloudinary"}), 500
                 
             # Save to our database
             media = Media(
@@ -49,15 +48,14 @@ class ImageUploadResource(Resource):
             db.session.add(media)
             db.session.commit()
             
-            current_app.logger.info(f"Successfully uploaded image: {url}")
-            return {
-                "id": str(media.id),
+            return jsonify({
+                "message": "Image uploaded successfully",
                 "url": url,
-                "content_type": media.content_type,
-                "created_at": media.created_at.isoformat()
-            }, 201
+                "media_id": str(media.id)
+            }), 201
             
         except Exception as e:
-            current_app.logger.exception("Image upload failed")
-            db.session.rollback()
-            return {"message": f"Failed to process image: {str(e)}"}, 500
+            current_app.logger.error(f"Error uploading image: {str(e)}")
+            return jsonify({"message": "An error occurred while uploading the image"}), 500
+    
+    return app

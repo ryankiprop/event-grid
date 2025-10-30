@@ -18,7 +18,7 @@ export default function EventCard ({ event }) {
       </Link>
       <div className='px-4 pb-4'>
         <Link to={`/events/${event.id}`} className='inline-block text-sm bg-primary-600 text-white px-3 py-1 rounded hover:bg-primary-700 transition'>
-          Checkout
+          View Details
         </Link>
       </div>
     </div>

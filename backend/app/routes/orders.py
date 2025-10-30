@@ -3,13 +3,15 @@ from datetime import datetime
 from uuid import UUID as _UUID
 import json
 
-from flask import request
+from flask import request, jsonify
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
-from flask_restful import Resource
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
-from ..models import Event, Order, OrderItem, TicketType, User
+from ..models.event import Event
+from ..models.order import Order, OrderItem
+from ..models.ticket import TicketType
+from ..models.user import User
 from ..schemas.order_schema import CreateOrderSchema, OrderSchema
 from ..utils.email import send_order_confirmation
 from ..utils.qrcode_util import build_ticket_qr_payload
@@ -19,55 +21,162 @@ orders_schema = OrderSchema(many=True)
 create_order_schema = CreateOrderSchema()
 FREE_MODE = (os.getenv("FREE_MODE") or "").lower() in ("1", "true", "yes")
 
-
 def _uuid(v):
     try:
         return _UUID(str(v))
     except Exception:
         return None
 
-
-class OrdersResource(Resource):
+def init_app(app):
+    @app.route('/api/orders', methods=['POST'])
     @jwt_required()
-    def post(self):
-        if not FREE_MODE:
-            return {
-                "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
-            }, 400
-        json_data = request.get_json() or {}
-        errors = create_order_schema.validate(json_data)
-        if errors:
-            return {"errors": errors}, 400
-        user_id = _uuid(get_jwt_identity())
-        if not user_id:
-            return {"message": "Invalid token"}, 400
-        event_id = _uuid(json_data.get("event_id"))
-        if not event_id:
-            return {"message": "Invalid event id"}, 400
+    def create_order():
+        try:
+            data = request.get_json() or {}
+            print("\n=== Processing Order ===")
+            
+            # Force free checkout
+            payment_method = 'free'
+            data['payment_method'] = payment_method
+            
+            # Basic validation
+            if not data.get('event_id') or not data.get('items') or not isinstance(data['items'], list):
+                return jsonify({"message": "Missing required fields: event_id and items array are required"}), 400
+                
+            user_id = _uuid(get_jwt_identity())
+            if not user_id:
+                return jsonify({"message": "Invalid user token"}), 400
+                
+            event_id = _uuid(data['event_id'])
+            if not event_id:
+                return jsonify({"message": "Invalid event ID format"}), 400
+                
+            event = Event.query.get(event_id)
+            if not event:
+                return jsonify({"message": "Event not found"}), 404
+                
+            # Process order items
+            order_items = []
+            total_amount = 0
+            
+            for item in data['items']:
+                if not item.get('ticket_type_id') or not item.get('quantity'):
+                    continue
+                    
+                ticket_type = TicketType.query.get(_uuid(item['ticket_type_id']))
+                if not ticket_type or ticket_type.event_id != event_id:
+                    continue
+                    
+                quantity = int(item.get('quantity', 1))
+                if quantity <= 0:
+                    continue
+                    
+                order_items.append({
+                    'ticket_type_id': str(ticket_type.id),
+                    'quantity': quantity,
+                    'unit_price': ticket_type.price
+                })
+                total_amount += ticket_type.price * quantity
+                
+            if not order_items:
+                return jsonify({"message": "No valid items in order"}), 400
+                
+            # Create order
+            order = Order(
+                user_id=user_id,
+                event_id=event_id,
+                total_amount=0,  # Free checkout
+                status='paid'    # Mark as paid immediately for free checkout
+            )
+            
+            db.session.add(order)
+            db.session.flush()  # Get the order ID
+            
+            # Create order items
+            for item in order_items:
+                order_item = OrderItem(
+                    order_id=order.id,
+                    ticket_type_id=item['ticket_type_id'],
+                    quantity=item['quantity'],
+                    unit_price=0  # Free checkout
+                )
+                db.session.add(order_item)
+                
+            # Create payment record
+            payment = Payment(
+                order_id=order.id,
+                amount=0,
+                provider='free',
+                status='completed',
+                currency='KES',
+                payment_method='free'
+            )
+            db.session.add(payment)
+            
+            db.session.commit()
+            
+            # Generate QR codes for tickets
+            for item in order.items:
+                item.qr_code = generate_ticket_qr(str(item.id))
+                
+            db.session.commit()
+            
+            # Send confirmation email (if configured)
+            try:
+                user = User.query.get(user_id)
+                if user and user.email:
+                    send_order_confirmation(user.email, order)
+            except Exception as e:
+                print(f"Error sending confirmation email: {str(e)}")
+                
+            return jsonify({
+                "message": "Order created successfully",
+                "order_id": str(order.id)
+            }), 201
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error creating order: {str(e)}")
+            return jsonify({"message": "Error processing your order. Please try again."}), 500
+            
         event = Event.query.get(event_id)
         if not event:
-            return {"message": "Event not found"}, 404
+            return jsonify({"message": "Event not found"}), 404
+            
         # Build order
-        order = Order(user_id=user_id, event_id=event.id, total_amount=0, status="paid")
+        order = Order(
+            user_id=user_id, 
+            event_id=event.id, 
+            total_amount=0, 
+            status="paid" if payment_method == 'free' else "pending"
+        )
         db.session.add(order)
         db.session.flush()  # get order.id
+        
         total = 0
         # Validate and reserve tickets
-        for item in json_data.get("items", []):
+        for item in data.get("items", []):
             tt_id = _uuid(item.get("ticket_type_id"))
             qty = int(item.get("quantity") or 0)
+            
             if not tt_id or qty <= 0:
                 db.session.rollback()
-                return {"message": "Invalid ticket item"}, 400
+                return jsonify({"message": "Invalid ticket item"}), 400
+                
             tt = TicketType.query.get(tt_id)
             if not tt or tt.event_id != event.id:
                 db.session.rollback()
-                return {"message": "Ticket type not found for event"}, 404
-            if tt.quantity_available < qty:
+                return jsonify({"message": "Ticket type not found for event"}), 404
+                
+            if tt.quantity_available is not None and tt.quantity_available < qty:
                 db.session.rollback()
-                return {"message": f"Insufficient availability for {tt.name}"}, 400
+                return jsonify({
+                    "message": f"Insufficient availability for {tt.name}"
+                }), 400
+                
             line_total = tt.price * qty
             total += line_total
+            
             oi = OrderItem(
                 order_id=order.id,
                 ticket_type_id=tt.id,
@@ -76,81 +185,100 @@ class OrdersResource(Resource):
             )
             db.session.add(oi)
             db.session.flush()  # get oi.id
-            oi.qr_code = build_ticket_qr_payload(
-                order_id=order.id,
-                item_id=oi.id,
-                user_id=user_id,
-                event_id=event.id,
-                event_title=event.title,
-                event_start_date_iso=(event.start_date.isoformat() if getattr(event, "start_date", None) else None),
-                ticket_type_id=tt.id,
-                ticket_type_name=tt.name,
-            )
-            tt.quantity_sold = (tt.quantity_sold or 0) + qty
+            
+            # Generate QR code for the ticket
+            oi.qr_code = generate_ticket_qr(order.id, oi.id, user_id)
+            
+            # Update ticket availability
+            if tt.quantity_available is not None:
+                tt.quantity_available -= qty
+                tt.quantity_sold = (tt.quantity_sold or 0) + qty
+        
         order.total_amount = total
+        
+        is_free_checkout = payment_method == 'free'
+        payment = Payment(
+            order_id=order.id,
+            amount=0 if is_free_checkout else total,
+            provider='free' if is_free_checkout else 'mpesa',
+            status='completed' if is_free_checkout else 'pending',
+            currency='KES',
+            payment_method=payment_method or 'mpesa'
+        )
+        db.session.add(payment)
+        
         db.session.commit()
-        # Send confirmation (best-effort)
+        
+        # Send confirmation email
         try:
             user = User.query.get(user_id)
-            send_order_confirmation(user, order)
-        except Exception:
-            pass
-        return {"order": order_schema.dump(order)}, 201
+            if user and user.email:
+                send_order_confirmation(user.email, order)
+        except Exception as e:
+            app.logger.error(f"Failed to send confirmation email: {str(e)}")
+        
+        return jsonify(order_schema.dump(order)), 201
 
-
-class UserOrdersResource(Resource):
+    @app.route('/api/orders/user', methods=['GET'])
     @jwt_required()
-    def get(self):
+    def get_user_orders():
         user_id = _uuid(get_jwt_identity())
         if not user_id:
-            return {"message": "Invalid token"}, 400
-        qs = Order.query.filter_by(user_id=user_id).order_by(Order.created_at.desc())
-        return {"orders": orders_schema.dump(qs.all())}, 200
+            return jsonify({"message": "Invalid token"}), 400
+            
+        orders = Order.query.filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+        return jsonify({"orders": orders_schema.dump(orders)})
 
-
-class OrderDetailResource(Resource):
+    @app.route('/api/orders/<order_id>', methods=['GET'])
     @jwt_required()
-    def get(self, order_id):
+    def get_order(order_id):
         oid = _uuid(order_id)
         if not oid:
-            return {"message": "Invalid order id"}, 400
+            return jsonify({"message": "Invalid order id"}), 400
+            
         order = Order.query.get(oid)
         if not order:
-            return {"message": "Not found"}, 404
+            return jsonify({"message": "Order not found"}), 404
+            
         claims = get_jwt()
         role = claims.get("role")
         user_id = _uuid(get_jwt_identity())
+        
         if role != "admin" and (not user_id or order.user_id != user_id):
-            return {"message": "Forbidden"}, 403
-        return {"order": order_schema.dump(order)}, 200
+            return jsonify({"message": "Forbidden"}), 403
+            
+        return jsonify({"order": order_schema.dump(order)})
 
-
-class EventOrdersResource(Resource):
+    @app.route('/api/orders/event/<event_id>', methods=['GET'])
     @jwt_required()
-    def get(self, event_id):
+    def get_event_orders(event_id):
         eid = _uuid(event_id)
         if not eid:
-            return {"message": "Invalid event id"}, 400
+            return jsonify({"message": "Invalid event id"}), 400
+            
         event = Event.query.get(eid)
         if not event:
-            return {"message": "Event not found"}, 404
+            return jsonify({"message": "Event not found"}), 404
+            
         claims = get_jwt()
         role = claims.get("role")
         uid = _uuid(get_jwt_identity())
+        
         if role != "admin" and (not uid or event.organizer_id != uid):
-            return {"message": "Forbidden"}, 403
-        qs = Order.query.filter_by(event_id=event.id).order_by(Order.created_at.desc())
-        return {"orders": orders_schema.dump(qs.all())}, 200
+            return jsonify({"message": "Forbidden"}), 403
+            
+        orders = Order.query.filter_by(event_id=event.id).order_by(Order.created_at.desc()).all()
+        return jsonify({"orders": orders_schema.dump(orders)})
 
-
-class VerifyCheckinResource(Resource):
+    @app.route('/api/orders/verify-checkin', methods=['POST'])
     @jwt_required()
-    def post(self):
-        json_data = request.get_json() or {}
-        event_id = _uuid(json_data.get("event_id"))
-        code = (json_data.get("code") or "").strip()
+    def verify_checkin():
+        data = request.get_json() or {}
+        event_id = _uuid(data.get("event_id"))
+        code = (data.get("code") or "").strip()
+        
         if not event_id or not code:
-            return {"valid": False, "message": "Missing event_id or code"}, 400
+            return jsonify({"valid": False, "message": "Missing event_id or code"}), 400
 
         claims = get_jwt()
         role = claims.get("role")
@@ -158,7 +286,7 @@ class VerifyCheckinResource(Resource):
 
         # Only organizers/admins can check in for their events
         if role not in ("organizer", "admin"):
-            return {"valid": False, "message": "Forbidden"}, 403
+            return jsonify({"valid": False, "message": "Forbidden"}), 403
 
         # First: try exact match
         oi = (
@@ -183,38 +311,20 @@ class VerifyCheckinResource(Resource):
                 pass
 
         if not oi:
-            # (rest unchanged: fallback try code as an Order ID for backwards compatibility)
-            oid = _uuid(code)
-            if oid:
-                order = Order.query.get(oid)
-                if not order or order.event_id != event_id:
-                    return {"valid": False, "message": "Order not found for this event"}, 404
-                # pick first not-checked-in item from this order
-                oi = (
-                    OrderItem.query
-                    .filter(OrderItem.order_id == order.id)
-                    .filter(OrderItem.checked_in == False)  # noqa: E712
-                    .first()
-                )
-                if not oi:
-                    return {"valid": False, "message": "All tickets for this order have been checked in"}, 400
-            else:
-                return {"valid": False, "message": "Invalid code"}, 404
+            return jsonify({"valid": False, "message": "Invalid code"}), 404
 
         # Check if user has permission for this event
         if role == "organizer" and oi.order.event.organizer_id != uid:
-            return {"valid": False, "message": "Forbidden"}, 403
+            return jsonify({"valid": False, "message": "Forbidden"}), 403
 
-        return {
+        return jsonify({
             "valid": True,
             "order": {
                 "id": str(oi.order.id),
                 "user_id": str(oi.order.user_id),
                 "total_amount": oi.order.total_amount,
                 "status": oi.order.status,
-                "created_at": (
-                    oi.order.created_at.isoformat() if oi.order.created_at else None
-                ),
+                "created_at": oi.order.created_at.isoformat() if oi.order.created_at else None,
             },
             "order_item": {
                 "id": str(oi.id),
@@ -223,22 +333,20 @@ class VerifyCheckinResource(Resource):
                 "unit_price": oi.unit_price,
                 "qr_code": oi.qr_code,
                 "checked_in": bool(oi.checked_in),
-                "checked_in_at": (
-                    oi.checked_in_at.isoformat() if oi.checked_in_at else None
-                ),
+                "checked_in_at": oi.checked_in_at.isoformat() if oi.checked_in_at else None,
                 "checked_in_by": str(oi.checked_in_by) if oi.checked_in_by else None,
             },
-        }, 200
+        })
 
-
-class MarkCheckinResource(Resource):
+    @app.route('/api/orders/check-in', methods=['POST'])
     @jwt_required()
-    def post(self):
-        json_data = request.get_json() or {}
-        event_id = _uuid(json_data.get("event_id"))
-        code = (json_data.get("code") or "").strip()
+    def mark_checkin():
+        data = request.get_json() or {}
+        event_id = _uuid(data.get("event_id"))
+        code = (data.get("code") or "").strip()
+        
         if not event_id or not code:
-            return {"message": "Missing event_id or code"}, 400
+            return jsonify({"valid": False, "message": "Missing event_id or code"}), 400
 
         claims = get_jwt()
         role = claims.get("role")
@@ -246,7 +354,7 @@ class MarkCheckinResource(Resource):
 
         # Only organizers/admins can check in for their events
         if role not in ("organizer", "admin"):
-            return {"message": "Forbidden"}, 403
+            return jsonify({"valid": False, "message": "Forbidden"}), 403
 
         # First: exact match
         oi = (
@@ -271,43 +379,23 @@ class MarkCheckinResource(Resource):
                 pass
 
         if not oi:
-            # Fallback: treat code as order ID (legacy)
-            oid = _uuid(code)
-            if oid:
-                order = Order.query.get(oid)
-                if not order or order.event_id != event_id:
-                    return {"message": "Order not found for this event"}, 404
-                oi = (
-                    OrderItem.query
-                    .filter(OrderItem.order_id == order.id)
-                    .filter(OrderItem.checked_in == False)  # noqa: E712
-                    .first()
-                )
-                if not oi:
-                    return {"message": "All tickets already checked in", "already": True}, 400
-            else:
-                return {"message": "Invalid code"}, 404
+            return jsonify({"valid": False, "message": "Invalid code"}), 404
 
         # Check if user has permission for this event
         if role == "organizer" and oi.order.event.organizer_id != uid:
-            return {"message": "Forbidden"}, 403
+            return jsonify({"valid": False, "message": "Forbidden"}), 403
 
-        if oi.checked_in:
-            return {"message": "Already checked in", "already": True}, 400
-
+        # Update check-in status
         oi.checked_in = True
         oi.checked_in_at = datetime.utcnow()
         oi.checked_in_by = uid
         db.session.commit()
 
-        return {
-            "message": "Checked in successfully",
-            "order_item": {
-                "id": str(oi.id),
-                "checked_in": True,
-                "checked_in_at": (
-                    oi.checked_in_at.isoformat() if oi.checked_in_at else None
-                ),
-                "checked_in_by": str(oi.checked_in_by) if oi.checked_in_by else None,
-            },
-        }, 200
+        return jsonify({
+            "valid": True,
+            "message": "Check-in successful",
+            "order_item_id": str(oi.id),
+            "checked_in_at": oi.checked_in_at.isoformat(),
+        })
+
+    return app

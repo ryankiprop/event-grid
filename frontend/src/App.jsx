@@ -7,6 +7,7 @@ import Events from './pages/public/Events'
 import EventDetails from './pages/public/EventDetails'
 import Navbar from './components/ui/Navbar'
 import Dashboard from './pages/dashboard/Dashboard'
+import UserDashboard from './components/dashboard/UserDashboard'
 import MyEvents from './pages/dashboard/MyEvents'
 import MyTickets from './pages/dashboard/MyTickets'
 import ManageUsers from './pages/dashboard/ManageUsers'
@@ -24,6 +25,14 @@ function PrivateRoute ({ children }) {
   return user ? children : <Navigate to='/login' replace />
 }
 
+function RoleDashboard () {
+  const { user } = useAuth()
+  if (user && (user.role === 'organizer' || user.role === 'admin')) {
+    return <Dashboard />
+  }
+  return <UserDashboard />
+}
+
 export default function App () {
   return (
     <ErrorBoundary>
@@ -38,7 +47,7 @@ export default function App () {
               <Route path='/events' element={<Events />} />
               <Route path='/events/:id' element={<EventDetails />} />
               <Route path='/create-event' element={<CreateEvent />} />
-              <Route path='/dashboard' element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+              <Route path='/dashboard' element={<PrivateRoute><RoleDashboard /></PrivateRoute>} />
               <Route path='/dashboard/my-events' element={<PrivateRoute><MyEvents /></PrivateRoute>} />
               <Route path='/dashboard/my-tickets' element={<PrivateRoute><MyTickets /></PrivateRoute>} />
               <Route path='/dashboard/manage-users' element={<PrivateRoute><ManageUsers /></PrivateRoute>} />

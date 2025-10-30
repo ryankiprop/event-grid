@@ -5,15 +5,7 @@ export const uploadImage = async (file) => {
     const formData = new FormData()
     formData.append('image', file)
     
-    // Get the JWT token from localStorage
-    const token = localStorage.getItem('token')
-    
-    const response = await api.post('/uploads/image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${token}`
-      }
-    })
+    const response = await api.post('/uploads/image', formData)
     
     if (response.data && response.data.url) {
       return { success: true, url: response.data.url, data: response.data }

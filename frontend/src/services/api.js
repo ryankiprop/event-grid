@@ -3,7 +3,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://event-grid.onrender.com/api'
+  baseURL: import.meta.env.VITE_API_URL || 'https://event-grid.onrender.com/api' // Removed localhost fallback to avoid confusion
 })
 
 // Ensure auth header is present on every request if token exists

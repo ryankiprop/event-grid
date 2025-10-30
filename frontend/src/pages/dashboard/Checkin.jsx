@@ -146,7 +146,7 @@ export default function Checkin () {
       <div className='mb-4'><Link to='/dashboard/my-events' className='text-primary-600'>← Back to My Events</Link></div>
       <h1 className='text-2xl font-semibold mb-4'>Check-in</h1>
       <form onSubmit={onVerify} className='flex items-center gap-2 mb-4'>
-        <input className='flex-1 border rounded px-3 py-2' placeholder='Scan/upload or paste QR code' value={code} onChange={e => setCode(e.target.value)} />
+        <input className='flex-1 border rounded px-3 py-2' placeholder='Scan or paste code' value={code} onChange={e => setCode(e.target.value)} />
         <button type='submit' disabled={loading || !code.trim()} className='bg-primary-600 text-white px-4 py-2 rounded'>{loading ? 'Verifying...' : 'Verify'}</button>
       </form>
       <div className='mb-3 flex items-center gap-2'>
@@ -157,9 +157,6 @@ export default function Checkin () {
           : (
             <button onClick={stopScan} className='px-3 py-2 border rounded'>Stop Camera</button>
             )}
-      </div>
-      <div className='mb-3'>
-        <input type='file' accept='image/*' onChange={scanImageFile} className='block' />
       </div>
       <div id='qr-region' className='w-full max-w-md aspect-square bg-black/10 rounded mb-4' />
       {error && <div className='text-red-600 mb-2'>{error}</div>}

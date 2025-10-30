@@ -1,24 +1,28 @@
 from uuid import UUID as _UUID
 
+from flask import jsonify
 from flask_jwt_extended import get_jwt, jwt_required
-from flask_restful import Resource
 
 from ..extensions import db
-from ..models import Event, Order, User
+from ..models.event import Event
+from ..models.order import Order
+from ..models.user import User
 
-
-class OrganizerDashboardResource(Resource):
+def init_app(app):
+    @app.route('/api/dashboard/organizer', methods=['GET'])
     @jwt_required()
-    def get(self):
+    def get_organizer_dashboard():
         claims = get_jwt()
         role = claims.get("role")
         sub = claims.get("sub") or claims.get("identity")
         try:
             uid = _UUID(str(sub))
         except Exception:
-            return {"message": "Invalid token"}, 400
+            return jsonify({"message": "Invalid token"}), 400
+            
         if role not in ("organizer", "admin"):
-            return {"message": "Forbidden"}, 403
+            return jsonify({"message": "Forbidden"}), 403
+            
         events_count = Event.query.filter_by(organizer_id=uid).count()
         orders_count = (
             db.session.query(Order)
@@ -26,31 +30,45 @@ class OrganizerDashboardResource(Resource):
             .filter(Event.organizer_id == uid)
             .count()
         )
-        return {
+        
+        # Calculate revenue from completed orders
+        revenue = db.session.query(db.func.sum(Order.total_amount))\
+            .filter(Order.status == 'completed')\
+            .join(Event, Order.event_id == Event.id)\
+            .filter(Event.organizer_id == uid)\
+            .scalar() or 0
+            
+        return jsonify({
             "stats": {
                 "events_count": events_count,
                 "orders_count": orders_count,
+                "revenue": float(revenue) if revenue else 0,
             }
-        }, 200
+        })
 
-
-class AdminDashboardResource(Resource):
+    @app.route('/api/dashboard/admin', methods=['GET'])
     @jwt_required()
-    def get(self):
-        try:
-            claims = get_jwt()
-            role = claims.get("role")
-            if role != "admin":
-                return {"message": "Forbidden"}, 403
-            users_count = User.query.count()
-            events_count = Event.query.count()
-            orders_count = Order.query.count()
-            return {
-                "stats": {
-                    "users_count": users_count,
-                    "events_count": events_count,
-                    "orders_count": orders_count
-                }
-            }, 200
-        except Exception as e:
-            return {"message": str(e)}, 500
+    def get_admin_dashboard():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify({"message": "Forbidden"}), 403
+            
+        users_count = User.query.count()
+        events_count = Event.query.count()
+        orders_count = Order.query.count()
+        
+        # Calculate total revenue from all completed orders
+        revenue = db.session.query(db.func.sum(Order.total_amount))\
+            .filter(Order.status == 'completed')\
+            .scalar() or 0
+            
+        return jsonify({
+            "stats": {
+                "users_count": users_count,
+                "events_count": events_count,
+                "orders_count": orders_count,
+                "revenue": float(revenue) if revenue else 0,
+            }
+        })
+
+    return app

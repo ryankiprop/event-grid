@@ -21,6 +21,7 @@ export default function EventDetails () {
   const [ticketTypes, setTicketTypes] = useState([])
   const [phone, setPhone] = useState('')
   const [mpesaPending, setMpesaPending] = useState(false)
+  const [mpesaPaymentId, setMpesaPaymentId] = useState(null)
 
   useEffect(() => {
     let mounted = true
@@ -131,30 +132,69 @@ export default function EventDetails () {
             </div>
             {event.description && <p className='leading-relaxed text-gray-800 whitespace-pre-line mb-6'>{event.description}</p>}
 
-            <div className='border-t pt-4'>
-              <h2 className='text-lg font-semibold mb-2'>Tickets</h2>
+            <div className='border-t pt-6'>
+              <h2 className='text-xl font-semibold mb-4'>Get Your Tickets</h2>
               <TicketSelector eventId={event.id} onChange={(items, tickets) => { setCartItems(items); setTicketTypes(tickets || []) }} />
-              <div className='flex items-center justify-between mt-4'>
-                <div className='text-lg font-medium'>Total KES {totalCents / 100}</div>
-                <div className='flex items-center gap-2'>
-                  {import.meta.env.VITE_ENABLE_FREE_CHECKOUT === 'true' && (
-                    <button onClick={onPurchase} disabled={submitting || mpesaPending} className='bg-gray-200 text-gray-800 px-4 py-2 rounded'>
-                      {submitting ? 'Processing…' : 'Free Checkout (dev)'}
-                    </button>
-                  )}
-                  <input
-                    className='border rounded px-3 py-2 w-56'
-                    placeholder='2547XXXXXXXX'
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                  <button onClick={onPayMpesa} disabled={mpesaPending} className='bg-primary-600 text-white px-4 py-2 rounded'>
-                    {mpesaPending ? 'Waiting for M-Pesa…' : 'Pay with M-Pesa'}
+              
+              {cartItems.length > 0 && (
+                <div className='mt-6 space-y-4'>
+                  <div className='flex items-center justify-between border-t border-b border-gray-200 py-4'>
+                    <span className='text-lg font-medium'>Total:</span>
+                    <span className='text-xl font-bold text-primary-600'>KES {totalCents / 100}</span>
+                  </div>
+
+                  {/* Free Checkout Button */}
+                  <button 
+                    onClick={onPurchase} 
+                    disabled={submitting || mpesaPending}
+                    className={`w-full py-3 px-4 rounded-md font-medium text-white transition-colors ${totalCents > 0 ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'} ${(submitting || mpesaPending) ? 'opacity-75 cursor-not-allowed' : ''}`}
+                  >
+                    {submitting ? (
+                      'Processing...'
+                    ) : totalCents > 0 ? (
+                      'Complete Free Registration'
+                    ) : (
+                      'Get Free Ticket'
+                    )}
                   </button>
+
+                  {/* OR Divider */}
+                  <div className='relative my-2'>
+                    <div className='absolute inset-0 flex items-center'>
+                      <div className='w-full border-t border-gray-300'></div>
+                    </div>
+                    <div className='relative flex justify-center text-sm'>
+                      <span className='px-2 bg-white text-gray-500'>OR</span>
+                    </div>
+                  </div>
+
+                  {/* M-Pesa Payment */}
+                  <div className='space-y-3'>
+                    <div className='flex items-center gap-2'>
+                      <input
+                        type='tel'
+                        className='flex-1 border rounded-md px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent'
+                        placeholder='2547XXXXXXXX'
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                      />
+                      <button 
+                        onClick={onPayMpesa} 
+                        disabled={mpesaPending || !phone}
+                        className={`px-6 py-2 rounded-md font-medium text-white ${mpesaPending ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'} transition-colors ${!phone ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {mpesaPending ? 'Processing...' : 'Pay with M-Pesa'}
+                      </button>
+                    </div>
+                    <p className='text-xs text-gray-500'>
+                      Enter your M-Pesa registered phone number (e.g., 254712345678)
+                    </p>
+                  </div>
                 </div>
-              </div>
-              {status?.err && <div className='text-red-600 mt-2'>{status.err}</div>}
-              {status?.ok && <div className='text-green-700 mt-2'>{status.ok}</div>}
+              )}
+              
+              {status?.err && <div className='mt-3 p-3 bg-red-50 text-red-700 rounded-md text-sm'>{status.err}</div>}
+              {status?.ok && <div className='mt-3 p-3 bg-green-50 text-green-700 rounded-md text-sm'>{status.ok}</div>}
             </div>
 
             {(user?.role === 'admin' || (user?.role === 'organizer' && user?.id === event.organizer_id)) && (

@@ -13,14 +13,23 @@ export default function TicketSelector ({ eventId, onChange }) {
     getEventTickets(eventId)
       .then((res) => {
         if (!mounted) return
-        const list = res.tickets || []
+        // The response is already formatted as { tickets: [...] } by the service
+        const list = Array.isArray(res.tickets) ? res.tickets : []
         setTickets(list)
         const initial = {}
-        list.forEach(t => { initial[t.id] = 0 })
+        list.forEach(t => { 
+          if (t && t.id) {
+            initial[t.id] = 0 
+          }
+        })
         setQuantities(initial)
-        setError(null)
+        setError(list.length === 0 ? 'No ticket types available for this event' : null)
       })
-      .catch((err) => setError(err?.response?.data?.message || 'Failed to load ticket types'))
+      .catch((err) => {
+        console.error('Error in TicketSelector:', err)
+        setError('Failed to load ticket types. Please try again later.')
+        setTickets([])
+      })
       .finally(() => mounted && setLoading(false))
     return () => { mounted = false }
   }, [eventId])
@@ -28,7 +37,7 @@ export default function TicketSelector ({ eventId, onChange }) {
   useEffect(() => {
     const items = Object.entries(quantities)
       .filter(([, q]) => q > 0)
-      .map(([ticketTypeId, quantity]) => ({ ticket_type_id: ticketTypeId, quantity }))
+      .map(([ticketTypeId, quantity]) => ({ ticketTypeId, quantity }))
     onChange?.(items, tickets)
   }, [quantities, onChange, tickets])
 

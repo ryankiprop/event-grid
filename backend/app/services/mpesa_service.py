@@ -1,7 +1,8 @@
-import os
 import base64
-import requests
+import os
 from datetime import datetime, timedelta
+
+import requests
 from flask import current_app
 
 class MpesaService:

@@ -1,88 +1,78 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 
-const CheckoutForm = ({ cart, total, onSuccess }) => {
-  const [phone, setPhone] = useState('');
+const CheckoutForm = ({ cart, onSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!phone) {
-      toast.error('Please enter your phone number');
+  const handleFreeCheckout = async () => {
+    if (!cart || cart.length === 0) {
+      toast.error('Your cart is empty');
       return;
     }
 
-    // Basic phone number validation
-    const phoneRegex = /^(?:254|0)?[17]\d{8}$/;
-    if (!phoneRegex.test(phone)) {
-      toast.error('Please enter a valid Kenyan phone number (e.g., 0712345678 or 254712345678)');
-      return;
-    }
-
-    setIsLoading(true);
-    
     try {
-      // Format phone number to 2547XXXXXXXX
-      const formattedPhone = phone.startsWith('0') 
-        ? '254' + phone.substring(1) 
-        : phone.startsWith('+254') 
-          ? phone.substring(1) 
-          : phone.startsWith('254') 
-            ? phone 
-            : '254' + phone;
+      setIsLoading(true);
+      
+      // Prepare order items with proper validation
+      const orderItems = cart.map(item => {
+        console.log('Processing cart item:', item);
+        
+        // Ensure we have the required fields
+        if (!item.id || !item.quantity) {
+          console.error('Invalid item format:', item);
+          throw new Error('One or more items in your cart are invalid');
+        }
 
-      // Create order items array for the backend
-      const orderItems = cart.map(item => ({
-        ticket_type_id: item.id,
-        quantity: item.quantity
-      }));
+        return {
+          ticket_type_id: item.id,
+          quantity: parseInt(item.quantity) || 1
+        };
+      });
 
-      // Get event ID from the first item in cart
       const eventId = cart[0]?.event_id;
       if (!eventId) {
         throw new Error('No event ID found in cart');
       }
 
-      // Call the payment initiation endpoint
-      const response = await api.post('/payments/mpesa/initiate', {
-        phone: formattedPhone,
+      // Log the data we're about to send
+      console.log('Sending order data:', {
         event_id: eventId,
         items: orderItems
       });
 
-      const { payment } = response.data;
+      const response = await api.post('/orders', {
+        event_id: eventId,
+        items: orderItems
+      });
       
-      if (payment && payment.checkout_request_id) {
-        // Show success message
-        toast.success('Payment initiated. Please check your phone to complete the payment.');
-        
-        // Call the success callback if provided
+      const order = response.data;
+      console.log('Order response:', order);
+
+      if (order && order.order_id) {
+        toast.success('Registration successful!');
         if (onSuccess) {
-          onSuccess(payment);
+          onSuccess({ order_id: order.order_id });
         }
-        
-        // Redirect to order status page
-        navigate(`/orders/${payment.order_id}?checkout_request_id=${payment.checkout_request_id}`);
+        navigate(`/orders/${order.order_id}/confirmation`);
       } else {
-        throw new Error('Failed to initiate payment');
+        throw new Error('Invalid response from server');
       }
     } catch (error) {
-      console.error('Payment error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to initiate payment. Please try again.';
+      console.error('Checkout error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      let errorMessage = 'Failed to complete registration. Please try again.';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -90,95 +80,24 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">Complete Your Order</h2>
-        
-        {/* Order Summary */}
-        <div className="mb-8">
-          <h3 className="text-lg font-semibold text-gray-700 mb-3 pb-2 border-b">Order Summary</h3>
-          <div className="space-y-3">
-            {cart.map((item) => (
-              <div key={item.id} className="flex justify-between items-center py-2 border-b">
-                <div>
-                  <h4 className="font-medium text-gray-800">{item.name}</h4>
-                  <p className="text-sm text-gray-500">Quantity: {item.quantity}</p>
-                </div>
-                <span className="font-medium">{formatCurrency(item.price * item.quantity)}</span>
-              </div>
-            ))}
-            
-            <div className="flex justify-between pt-3 border-t border-gray-200">
-              <span className="text-lg font-bold">Total:</span>
-              <span className="text-lg font-bold text-primary-600">{formatCurrency(total)}</span>
-            </div>
-          </div>
+    <div className="bg-white p-6 rounded-lg shadow-md">
+      <h2 className="text-xl font-semibold mb-4">Complete Registration</h2>
+      
+      <div className="space-y-4">
+        <div className="bg-gray-50 p-4 rounded-md">
+          <p className="text-gray-600 mb-2">You're about to register for the event.</p>
+          <p className="font-medium">Total: <span className="text-green-600">FREE</span></p>
         </div>
 
-        {/* Payment Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-4">Payment Details</h3>
-            <div className="bg-blue-50 p-4 rounded-lg mb-6">
-              <p className="text-sm text-blue-700">
-                You'll receive an M-Pesa payment request on your phone to complete the transaction.
-              </p>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                  M-Pesa Phone Number
-                </label>
-                <div className="mt-1 relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">+254</span>
-                  </div>
-                  <input
-                    type="tel"
-                    id="phone"
-                    value={phone}
-                    onChange={(e) => {
-                      // Remove non-numeric characters
-                      const value = e.target.value.replace(/\D/g, '');
-                      setPhone(value);
-                    }}
-                    placeholder="712345678"
-                    className="focus:ring-primary-500 focus:border-primary-500 block w-full pl-16 pr-12 sm:text-sm border-gray-300 rounded-md py-3"
-                    required
-                  />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Enter your M-Pesa registered phone number (e.g., 712345678)
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-4">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 ${isLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Processing...
-                </>
-              ) : (
-                'Pay with M-Pesa'
-              )}
-            </button>
-            
-            <p className="mt-2 text-xs text-gray-500 text-center">
-              By completing your purchase, you agree to our Terms of Service and Privacy Policy.
-            </p>
-          </div>
-        </form>
+        <button
+          onClick={handleFreeCheckout}
+          disabled={isLoading}
+          className={`w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors ${
+            isLoading ? 'opacity-70 cursor-not-allowed' : ''
+          }`}
+        >
+          {isLoading ? 'Processing...' : 'Complete Free Registration'}
+        </button>
       </div>
     </div>
   );

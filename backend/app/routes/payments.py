@@ -1,7 +1,7 @@
 import json
 from uuid import UUID as _UUID
 
-from flask import current_app, request
+from flask import current_app, request, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restful import Resource
 
@@ -9,7 +9,7 @@ from ..extensions import db
 from ..models import Event, Order, OrderItem, TicketType
 from ..models.payment import Payment
 from ..utils.mpesa import initiate_stk_push
-from ..utils.qrcode_util import build_ticket_qr_payload
+from ..utils.qrcode_util import generate_ticket_qr
 
 
 def _uuid(v):
@@ -19,189 +19,166 @@ def _uuid(v):
         return None
 
 
-class MpesaInitiateResource(Resource):
+def init_app(app):
+    @app.route('/api/payments/mpesa/initiate', methods=['POST'])
     @jwt_required()
-    def post(self):
+    def initiate_mpesa_payment():
         data = request.get_json() or {}
         user_id = _uuid(get_jwt_identity())
         if not user_id:
-            return {"message": "Invalid token"}, 400
+            return jsonify({"message": "Invalid token"}), 400
+            
         event_id = _uuid(data.get("event_id"))
         phone = (data.get("phone") or "").strip()
-        items = data.get("items") or []
-        if not event_id or not phone or not items:
-            return {"message": "event_id, phone and items are required"}, 400
+        if not phone or not phone.startswith("254") or len(phone) != 12:
+            return jsonify({"message": "Invalid phone number. Use format 2547XXXXXXXX"}), 400
 
+        # Verify event exists and get ticket types
         event = Event.query.get(event_id)
         if not event:
-            return {"message": "Event not found"}, 404
+            return jsonify({"message": "Event not found"}), 404
 
-        # Create order in pending state and reserve items
+        # Create order
         order = Order(
-            user_id=user_id, event_id=event.id, total_amount=0, status="pending"
+            user_id=user_id,
+            event_id=event_id,
+            status="pending",
+            total_amount=0,  # Will be updated with ticket amounts
         )
         db.session.add(order)
-        db.session.flush()
 
-        total = 0
-        for idx, it in enumerate(items):
-            tt_id = _uuid(it.get("ticket_type_id"))
-            qty_raw = it.get("quantity")
-            try:
-                qty = int(qty_raw or 0)
-            except Exception:
-                qty = 0
-            if not tt_id:
+        # Process ticket types
+        total_amount = 0
+        for item in data.get("tickets", []):
+            ticket_type_id = item.get("ticket_type_id")
+            if not ticket_type_id:
                 db.session.rollback()
-                return {"message": f"Invalid ticket_type_id at index {idx}"}, 400
-            if qty <= 0:
+                return jsonify({"message": "Ticket type ID is required"}), 400
+                
+            ticket_type = TicketType.query.get(_uuid(ticket_type_id))
+            if not ticket_type or ticket_type.event_id != event_id:
                 db.session.rollback()
-                return {"message": f"Invalid quantity at index {idx}"}, 400
-            tt = TicketType.query.get(tt_id)
-            if not tt or tt.event_id != event.id:
+                return jsonify({"message": f"Invalid ticket type ID: {ticket_type_id}"}), 400
+
+            quantity = int(item.get("quantity", 1))
+            if quantity < 1:
+                continue
+
+            # Check ticket availability
+            if ticket_type.quantity_available is not None and quantity > ticket_type.quantity_available:
                 db.session.rollback()
-                return {"message": "Ticket type not found for event"}, 404
-            if tt.quantity_available < qty:
-                db.session.rollback()
-                return {"message": f"Insufficient availability for {tt.name}"}, 400
-            line_total = tt.price * qty
-            total += line_total
-            oi = OrderItem(
-                order_id=order.id,
-                ticket_type_id=tt.id,
-                quantity=qty,
-                unit_price=tt.price,
+                return jsonify({
+                    "message": f"Not enough tickets available for {ticket_type.name}"
+                }), 400
+
+            # Create order item
+            order_item = OrderItem(
+                order=order,
+                ticket_type=ticket_type,
+                quantity=quantity,
+                price=ticket_type.price,
             )
-            db.session.add(oi)
-        order.total_amount = total
-        db.session.flush()
+            db.session.add(order_item)
+            total_amount += ticket_type.price * quantity
 
-        # Amount is stored in cents; convert to KES integer amount
-        amount_kes = max(1, total // 100)
+        if total_amount <= 0:
+            db.session.rollback()
+            return jsonify({"message": "No valid tickets in order"}), 400
+
+        # Update order total
+        order.total_amount = total_amount
 
         # Create payment record
         payment = Payment(
-            order_id=order.id,
+            order=order,
+            amount=total_amount,
             provider="mpesa",
-            amount=total,
+            status="pending",
             phone=phone,
-            status="initiated",
         )
         db.session.add(payment)
-        db.session.flush()
+        db.session.commit()
 
+        # Initiate STK push
         try:
-            resp = initiate_stk_push(
+            response = initiate_stk_push(
                 phone_msisdn=phone,
-                amount_kes=amount_kes,
-                account_ref=str(order.id).replace("-", "")[:12],
-                description=f"Event {event.title}",
+                amount_kes=total_amount,
+                account_ref=f"EVENT{event_id}",
+                description=f"Payment for {event.title}",
+                amount=total_amount,
+                account_reference=f"EVENT-{event.id}",
+                callback_url=f"{app.config.get('BASE_URL')}/api/payments/mpesa/callback"
             )
-            payment.status = "processing"
-            payment.merchant_request_id = resp.get("MerchantRequestID")
-            payment.checkout_request_id = resp.get("CheckoutRequestID")
+            payment.provider_reference = response.get("CheckoutRequestID")
             db.session.commit()
-            return {
-                "payment": {
-                    "id": str(payment.id),
-                    "status": payment.status,
-                    "order_id": str(order.id),
-                    "amount_kes": amount_kes,
-                    "checkout_request_id": payment.checkout_request_id,
-                },
-            }, 200
+            return jsonify({
+                "message": "Payment initiated", 
+                "payment_id": str(payment.id)
+            })
         except Exception as e:
-            current_app.logger.exception("mpesa.initiate failed")
-            payment.status = "failed"
-            db.session.commit()
-            return {"message": "Failed to initiate payment"}, 500
+            db.session.rollback()
+            app.logger.error(f"Failed to initiate M-Pesa payment: {str(e)}")
+            return jsonify({"message": "Failed to initiate payment"}), 500
 
-
-class PaymentStatusResource(Resource):
+    @app.route('/api/payments/<payment_id>/status', methods=['GET'])
     @jwt_required()
-    def get(self, payment_id):
-        try:
-            pid = _uuid(payment_id)
-        except Exception:
-            pid = None
-        if not pid:
-            return {"message": "Invalid payment id"}, 400
-        p = Payment.query.get(pid)
-        if not p:
-            return {"message": "Not found"}, 404
-        return {
-            "payment": {
-                "id": str(p.id),
-                "order_id": str(p.order_id),
-                "status": p.status,
-                "result_code": p.result_code,
-                "result_desc": p.result_desc,
-            }
-        }, 200
+    def get_payment_status(payment_id):
+        payment = Payment.query.get(_uuid(payment_id))
+        if not payment:
+            return jsonify({"message": "Payment not found"}), 404
 
+        # Verify the payment belongs to the current user
+        if str(payment.order.user_id) != get_jwt_identity():
+            return jsonify({"message": "Unauthorized"}), 403
 
-class MpesaCallbackResource(Resource):
-    def post(self):
-        payload = request.get_json() or {}
-        try:
-            # Per Daraja docs: Body.stkCallback.CheckoutRequestID
-            cb = payload.get("Body", {}).get("stkCallback", {})
-            checkout_id = cb.get("CheckoutRequestID")
-            result_code = str(cb.get("ResultCode"))
-            result_desc = cb.get("ResultDesc")
-        except Exception:
-            checkout_id = None
-            result_code = None
-            result_desc = None
+        return jsonify({
+            "payment_id": str(payment.id),
+            "status": payment.status,
+            "amount": payment.amount,
+            "provider": payment.provider,
+            "created_at": payment.created_at.isoformat(),
+            "updated_at": payment.updated_at.isoformat(),
+        })
 
-        if not checkout_id:
-            return {"message": "Invalid callback"}, 400
+    @app.route('/api/payments/mpesa/callback', methods=['POST'])
+    def mpesa_callback():
+        data = request.get_json()
+        app.logger.info(f"M-Pesa callback received: {data}")
 
-        p = Payment.query.filter_by(checkout_request_id=checkout_id).first()
-        if not p:
-            return {"message": "Payment not found"}, 404
+        # Verify the callback is from M-Pesa
+        # In production, verify the callback signature
 
-        p.raw_callback = json.dumps(payload)
-        p.result_code = result_code
-        p.result_desc = result_desc
+        # Process the callback
+        result = data.get("Body", {}).get("stkCallback", {})
+        checkout_request_id = result.get("CheckoutRequestID")
+        result_code = result.get("ResultCode")
+
+        if not checkout_request_id:
+            app.logger.error("No CheckoutRequestID in M-Pesa callback")
+            return jsonify({"message": "Invalid callback"}), 400
+
+        # Find the payment
+        payment = Payment.query.filter_by(provider_reference=checkout_request_id).first()
+        if not payment:
+            app.logger.error(f"Payment not found for CheckoutRequestID: {checkout_request_id}")
+            return jsonify({"message": "Payment not found"}), 404
+
+        # Update payment status based on M-Pesa response
         if result_code == "0":
-            p.status = "success"
-            # Mark order paid and generate QR codes now that payment succeeded
-            order = Order.query.get(p.order_id)
-            if order:
-                order.status = "paid"
-                try:
-                    for oi in order.items:
-                        if not oi.qr_code:
-                            current_app.logger.info(f"Generating QR code for order item {oi.id}")
-                            tt = TicketType.query.get(oi.ticket_type_id)
-                            qr_code = build_ticket_qr_payload(
-                                order_id=order.id,
-                                item_id=oi.id,
-                                user_id=order.user_id,
-                                event_id=order.event_id,
-                                event_title=(order.event.title if getattr(order, "event", None) else None),
-                                event_start_date_iso=(order.event.start_date.isoformat() if getattr(getattr(order, "event", None), "start_date", None) else None),
-                                ticket_type_id=(tt.id if tt else None),
-                                ticket_type_name=(tt.name if tt else None),
-                            )
-                            if not qr_code:
-                                current_app.logger.error(f"Failed to generate QR code for order item {oi.id}")
-                            else:
-                                oi.qr_code = qr_code
-                                current_app.logger.info(f"QR code generated for order item {oi.id}")
-
-                        # Update ticket type sold count
-                        tt2 = tt if 'tt' in locals() else TicketType.query.get(oi.ticket_type_id)
-                        if tt2:
-                            tt2.quantity_sold = (tt2.quantity_sold or 0) + (oi.quantity or 0)
-                            current_app.logger.info(f"Updated quantity_sold for ticket type {tt2.id} to {tt2.quantity_sold}")
-                    
-                    # Commit after all updates
-                    db.session.commit()
-                    current_app.logger.info(f"Successfully processed payment for order {order.id}")
-                    
-                except Exception as e:
+            payment.status = "completed"
+            payment.order.status = "completed"
+            # Generate QR codes for tickets
+            for item in payment.order.items:
+                for _ in range(item.quantity):
+                    # Generate QR code with ticket details
+                    ticket_data = {
+                        "order_id": str(payment.order.id),
+                        "ticket_type_id": str(item.ticket_type_id),
+                        "event_id": str(item.ticket_type.event_id),
+                    }
+                    qr_code_url = generate_ticket_qr(ticket_data)
+                    # In a real app, you would save this QR code URL to a ticket record
                     current_app.logger.exception(f"mpesa.callback ticket processing failed: {str(e)}")
                     db.session.rollback()
                     # Re-raise to trigger the outer exception handler
