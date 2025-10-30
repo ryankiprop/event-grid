@@ -58,30 +58,31 @@ def create_app():
         "http://localhost:3000"  # For local development
     ]
     
+    # Configure CORS with all necessary settings
     CORS(
         app,
         resources={
-            r"/api/*": {
+            r"/*": {
                 "origins": CORS_ORIGINS,
                 "supports_credentials": True,
                 "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                 "expose_headers": ["Content-Range", "X-Total-Count"],
+                "max_age": 600  # Cache preflight requests for 10 minutes
             }
         },
-        supports_credentials=True
+        supports_credentials=True,
+        automatic_options=True
     )
     
-    # Add CORS headers to all responses
+    # Add security headers to all responses
     @app.after_request
-    def after_request(response):
-        # Only add CORS headers if the request is from an allowed origin
-        origin = request.headers.get('Origin')
-        if origin in CORS_ORIGINS:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    def add_security_headers(response):
+        # Security headers
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         return response
     
     # Initialize database and migrations
