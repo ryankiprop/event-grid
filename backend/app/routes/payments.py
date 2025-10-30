@@ -208,14 +208,3 @@ class MpesaTestEnvResource(Resource):
             "MPESA_CALLBACK_URL": os.getenv("MPESA_CALLBACK_URL"),
         }
         return env_vars, 200
-
-
-# Create the payments blueprint
-payments_bp = Blueprint('payments', __name__)
-api = Api(payments_bp)
-
-# Add resources to the API
-api.add_resource(MpesaInitiateResource, '/mpesa/initiate')
-api.add_resource(PaymentStatusResource, '/status/<string:payment_id>')
-api.add_resource(MpesaCallbackResource, '/mpesa/callback')
-api.add_resource(MpesaTestEnvResource, '/mpesa/test-env')
