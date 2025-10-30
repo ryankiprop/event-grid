@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import api from '../../services/api';
+import { createOrder } from '../../services/orders';
 
 const CheckoutForm = ({ cart, onSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -16,35 +16,27 @@ const CheckoutForm = ({ cart, onSuccess }) => {
     try {
       setIsLoading(true);
       
-      // Prepare order items with proper validation
-      const orderItems = cart.map(item => {
-        if (!item.id || !item.quantity) {
-          console.error('Invalid item format:', item);
-          throw new Error('One or more items in your cart are invalid');
-        }
-
-        return {
-          ticket_type_id: item.id,
-          quantity: parseInt(item.quantity) || 1
-        };
-      });
-
       const eventId = cart[0]?.event_id;
       if (!eventId) {
         throw new Error('No event ID found in cart');
       }
 
-      const response = await api.post('/orders', {
+      // Prepare order items in the format expected by the createOrder service
+      const orderItems = cart.map(item => ({
+        ticket_type_id: item.id,
+        quantity: parseInt(item.quantity) || 1
+      }));
+
+      // Use the createOrder service which handles the correct payload format
+      const order = await createOrder({
         event_id: eventId,
         items: orderItems
       });
-      
-      const order = response.data;
 
-      if (order && order.order_id) {
+      if (order && order.id) {
         toast.success('Registration successful!');
-        onSuccess?.({ order_id: order.order_id });
-        navigate(`/orders/${order.order_id}/confirmation`);
+        onSuccess?.(order);
+        navigate(`/orders/${order.id}/confirmation`);
       } else {
         throw new Error('Invalid response from server');
       }
