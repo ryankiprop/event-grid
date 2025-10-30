@@ -141,15 +141,17 @@ def create_app():
             'message': 'An unexpected error occurred'
         }), 500
 
+    # Import SQLAlchemy's IntegrityError
+    from sqlalchemy.exc import IntegrityError
+
     # Handle database errors
-    @app.errorhandler(db.IntegrityError)
+    @app.errorhandler(IntegrityError)
     def handle_db_integrity_error(error):
         db.session.rollback()
-        app.logger.error(f'Database integrity error: {str(error)}')
         return jsonify({
             'success': False,
-            'error': 'Database Error',
-            'message': 'A database integrity error occurred'
+            'error': 'Database Integrity Error',
+            'message': str(error.orig) if hasattr(error, 'orig') else 'A database integrity error occurred'
         }), 400
 
     # Handle validation errors
