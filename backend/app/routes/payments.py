@@ -3,6 +3,7 @@ from uuid import UUID as _UUID
 
 from flask import current_app, request, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_restful import Resource
 
 from ..extensions import db
 from ..models import Event, Order, OrderItem, TicketType
