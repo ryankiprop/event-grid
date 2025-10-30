@@ -32,21 +32,34 @@ def init_app(app):
     def create_order():
         data = request.get_json() or {}
         
+        # Debug log the incoming request
+        print("\n=== Incoming Order Request ===")
+        print(f"Raw request data: {data}")
+        print(f"Request headers: {dict(request.headers)}")
+        
         # Always allow direct checkout, ignore payment method for now
         payment_method = 'free'  # Force free checkout
         data['payment_method'] = payment_method  # Ensure payment method is set
+        
+        print(f"After setting payment method: {data}")
             
         errors = create_order_schema.validate(data)
         if errors:
+            print(f"Validation errors: {errors}")
             return jsonify({"errors": errors}), 400
             
         user_id = _uuid(get_jwt_identity())
         if not user_id:
+            print(f"Invalid user ID from token: {get_jwt_identity()}")
             return jsonify({"message": "Invalid token"}), 400
             
         event_id = _uuid(data.get("event_id"))
         if not event_id:
+            print(f"Invalid event_id: {data.get('event_id')}")
             return jsonify({"message": "Invalid event id"}), 400
+            
+        print(f"User ID: {user_id}, Event ID: {event_id}")
+        print("=== End of Request Debugging ===\n")
             
         event = Event.query.get(event_id)
         if not event:

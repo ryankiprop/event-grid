@@ -7,12 +7,22 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
   const handleFreeCheckout = async () => {
     try {
       setIsLoading(true);
+      
+      // Validate cart has items
+      if (!cart || cart.length === 0) {
+        throw new Error('No items in cart');
+      }
+
       // Create order items array for the backend
-      const orderItems = cart.map(item => ({
-        ticket_type_id: item.id,
-        quantity: item.quantity,
-        price: item.price || 0  // Include price for validation
-      }));
+      const orderItems = cart.map(item => {
+        if (!item.id || !item.quantity) {
+          throw new Error('Invalid cart item format');
+        }
+        return {
+          ticket_type_id: item.id,
+          quantity: item.quantity
+        };
+      });
 
       // Get event ID from the first item in cart
       const eventId = cart[0]?.event_id;
@@ -20,13 +30,17 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
         throw new Error('No event ID found in cart');
       }
 
+      console.log('Creating order with:', {
+        event_id: eventId,
+        items: orderItems,
+        payment_method: 'free'
+      });
+
       // Call the free checkout endpoint
       const response = await api.post('/orders', {
         event_id: eventId,
         items: orderItems,
-        payment_method: 'free',
-        amount: total,  // Include total amount for validation
-        currency: 'KES' // Include currency for consistency
+        payment_method: 'free'
       });
 
       const order = response.data;
