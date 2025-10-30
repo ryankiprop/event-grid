@@ -50,10 +50,15 @@ def init_app(app):
         # Process ticket types
         total_amount = 0
         for item in data.get("tickets", []):
-            ticket_type = TicketType.query.get(_uuid(item.get("ticket_type_id")))
+            ticket_type_id = item.get("ticket_type_id")
+            if not ticket_type_id:
+                db.session.rollback()
+                return jsonify({"message": "Ticket type ID is required"}), 400
+                
+            ticket_type = TicketType.query.get(_uuid(ticket_type_id))
             if not ticket_type or ticket_type.event_id != event_id:
                 db.session.rollback()
-                return jsonify({"message": f"Invalid ticket type: {item.get('ticket_type_id')}"}), 400
+                return jsonify({"message": f"Invalid ticket type ID: {ticket_type_id}"}), 400
 
             quantity = int(item.get("quantity", 1))
             if quantity < 1:
@@ -97,7 +102,10 @@ def init_app(app):
         # Initiate STK push
         try:
             response = initiate_stk_push(
-                phone=phone,
+                phone_msisdn=phone,
+                amount_kes=total_amount,
+                account_ref=f"EVENT{event_id}",
+                description=f"Tickets for {event.title}",
                 amount=total_amount,
                 account_reference=f"EVENT-{event.id}",
                 callback_url=f"{app.config.get('BASE_URL')}/api/payments/mpesa/callback",
