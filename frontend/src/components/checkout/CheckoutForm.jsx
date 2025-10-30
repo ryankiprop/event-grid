@@ -9,7 +9,7 @@ const CheckoutForm = ({ cart, onSuccess }) => {
 
   const handleCheckout = async () => {
     if (!cart || cart.length === 0) {
-      toast.error('Your cart is empty');
+      toast.error('Please select at least one ticket');
       return;
     }
 
@@ -18,28 +18,21 @@ const CheckoutForm = ({ cart, onSuccess }) => {
       
       const eventId = cart[0]?.event_id;
       if (!eventId) {
-        throw new Error('No event ID found in cart');
+        throw new Error('Invalid event');
       }
 
-      // Prepare order items
-      const orderItems = cart.map(item => ({
-        ticket_type_id: item.id,
-        quantity: parseInt(item.quantity) || 1
-      }));
-
-      // Create order
-      const order = await createOrder({
+      // Create order with selected tickets
+      await createOrder({
         event_id: eventId,
-        items: orderItems
+        items: cart.map(item => ({
+          ticket_type_id: item.id,
+          quantity: parseInt(item.quantity) || 1
+        }))
       });
 
-      if (order && order.id) {
-        toast.success('Registration successful!');
-        onSuccess?.(order);
-        navigate(`/orders/${order.id}/confirmation`);
-      } else {
-        throw new Error('Failed to create order');
-      }
+      // Redirect to tickets dashboard
+      navigate('/dashboard/tickets');
+      toast.success('Tickets booked successfully!');
     } catch (error) {
       console.error('Checkout error:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to complete checkout. Please try again.';
@@ -49,19 +42,33 @@ const CheckoutForm = ({ cart, onSuccess }) => {
     }
   };
 
+  if (!cart || cart.length === 0) {
+    return (
+      <div className="text-center p-8">
+        <p className="text-gray-600 mb-4">No tickets selected</p>
+        <button
+          onClick={() => window.history.back()}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+        >
+          Back to Event
+        </button>
+      </div>
+    );
+  }
+
+  const totalTickets = cart.reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0);
+
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-xl font-semibold mb-4">Complete Your Registration</h2>
-      
-      <div className="space-y-6">
-        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-          <h3 className="text-lg font-semibold mb-4">Registration Summary</h3>
-          
+    <div className="max-w-md mx-auto p-4">
+      <div className="bg-white rounded-lg border p-6">
+        <h2 className="text-lg font-semibold mb-4">Your Tickets</h2>
+        
+        <div className="space-y-4 mb-6">
           {cart.map((item, index) => (
-            <div key={index} className="flex justify-between py-2 border-b border-gray-100">
+            <div key={index} className="flex justify-between items-center">
               <div>
                 <p className="font-medium">{item.name}</p>
-                <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
               </div>
             </div>
           ))}
@@ -70,11 +77,9 @@ const CheckoutForm = ({ cart, onSuccess }) => {
         <button
           onClick={handleCheckout}
           disabled={isLoading}
-          className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg py-4 px-6 rounded-lg transition-all ${
-            isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md'
-          }`}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded disabled:opacity-50"
         >
-          {isLoading ? 'Processing...' : 'Complete Registration'}
+          {isLoading ? 'Processing...' : 'Get Tickets'}
         </button>
       </div>
     </div>
