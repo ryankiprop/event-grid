@@ -4,7 +4,7 @@ from uuid import UUID as _UUID
 import json
 import traceback
 
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy.orm import joinedload
 

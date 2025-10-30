@@ -6,7 +6,6 @@ import EventCard from '../../components/events/EventCard'
 import Pagination from '../../components/ui/Pagination'
 import LoadingSpinner from '../../components/ui/LoadingSpinner'
 import { useAuth } from '../../context/AuthContext'
-import dayjs from 'dayjs'
 
 export default function Events () {
   const { user } = useAuth()
