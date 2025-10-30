@@ -1,158 +1,158 @@
 from uuid import UUID as _UUID
+from functools import wraps
 
-from flask import request, Blueprint, jsonify
+from flask import request, jsonify, current_app
 from flask_jwt_extended import (
     create_access_token,
     get_jwt_identity,
-    jwt_required,
+    get_jwt,
+    jwt_required as jwt_required_original,
 )
 
 from ..extensions import db
-from ..models import User
-from ..schemas import UserCreateSchema, UserLoginSchema, UserSchema
+from ..models.user import User
+from ..schemas.user_schema import UserCreateSchema, UserLoginSchema, UserSchema
 from ..utils.auth import check_password, hash_password
 from ..utils.email import send_welcome_email
 
-# Create a blueprint for auth routes
-auth_bp = Blueprint('auth', __name__)
-
+# Initialize schemas
 user_schema = UserSchema()
 user_create_schema = UserCreateSchema()
 user_login_schema = UserLoginSchema()
 
-@auth_bp.route('/register', methods=['POST'])
-def register():
-    json_data = request.get_json() or {}
-    errors = user_create_schema.validate(json_data)
-    if errors:
-        return jsonify({"errors": errors}), 400
+def jwt_required(*args, **kwargs):
+    """Custom JWT required decorator that works with both function and method views"""
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args2, **kwargs2):
+            # Call the original jwt_required decorator
+            return jwt_required_original(*args, **kwargs)(lambda: fn(*args2, **kwargs2))()
+        return wrapper
+    return decorator
 
-    email = json_data.get("email").lower()
-    if User.query.filter_by(email=email).first():
-        return jsonify({"message": "Email already registered"}), 400
+def role_required(roles):
+    """Decorator to require specific user roles"""
+    def decorator(f):
+        @wraps(f)
+        @jwt_required()
+        def decorated_function(*args, **kwargs):
+            claims = get_jwt()
+            if claims.get("role") not in roles:
+                return jsonify({"message": "Insufficient permissions"}), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
-    pw_hash = hash_password(json_data.get("password"))
-    user = User(
-        email=email,
-        password_hash=pw_hash,
-        first_name=json_data.get("first_name"),
-        last_name=json_data.get("last_name"),
-        role="user",
-    )
-    db.session.add(user)
-    db.session.commit()
+def init_app(app):
+    @app.route('/api/auth/register', methods=['POST'])
+    def register():
+        data = request.get_json() or {}
+        errors = user_create_schema.validate(data)
+        if errors:
+            return jsonify({"errors": errors}), 400
 
-    # Send welcome email (fire and forget)
-    try:
-        send_welcome_email(user)
-    except Exception as e:
-        from flask import current_app
-        current_app.logger.error(f"Failed to send welcome email: {str(e)}")
+        email = data.get("email", "").lower()
+        if User.query.filter_by(email=email).first():
+            return jsonify({"message": "Email already registered"}), 400
 
-    token = create_access_token(
-        identity=str(user.id), additional_claims={"role": user.role}
-    )
-    return jsonify({"token": token, "user": user_schema.dump(user)}), 201
+        user = User(
+            email=email,
+            password_hash=hash_password(data.get("password")),
+            first_name=data.get("first_name"),
+            last_name=data.get("last_name"),
+            role="user",
+        )
+        db.session.add(user)
+        db.session.commit()
 
-@auth_bp.route('/login', methods=['POST'])
-def login():
-    json_data = request.get_json() or {}
-    errors = user_login_schema.validate(json_data)
-    if errors:
-        return jsonify({"errors": errors}), 400
+        # Send welcome email (fire and forget)
+        try:
+            send_welcome_email(user)
+        except Exception as e:
+            current_app.logger.error(f"Failed to send welcome email: {str(e)}")
 
-    email = json_data.get("email").lower()
-    password = json_data.get("password")
+        return jsonify(user_schema.dump(user)), 201
 
-    user = User.query.filter_by(email=email).first()
-    if not user or not check_password(password, user.password_hash):
-        return jsonify({"message": "Invalid credentials"}), 401
+    @app.route('/api/auth/login', methods=['POST'])
+    def login():
+        data = request.get_json() or {}
+        errors = user_login_schema.validate(data)
+        if errors:
+            return jsonify({"errors": errors}), 400
 
-    token = create_access_token(
-        identity=str(user.id), additional_claims={"role": user.role}
-    )
-    return jsonify({"token": token, "user": user_schema.dump(user)}), 200
+        user = User.query.filter_by(email=data["email"].lower()).first()
+        if not user or not check_password(data["password"], user.password_hash):
+            return jsonify({"message": "Invalid email or password"}), 401
 
-@auth_bp.route('/me', methods=['GET'])
-@jwt_required()
-def get_me():
-    identity = get_jwt_identity()
-    try:
-        user_uuid = _UUID(str(identity))
-    except Exception:
-        return jsonify({"message": "Invalid token identity"}), 400
+        access_token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
+        return jsonify({
+            "access_token": access_token,
+            "user": user_schema.dump(user)
+        }), 200
+
+    @app.route('/api/auth/me', methods=['GET'])
+    @jwt_required()
+    def get_current_user():
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+        return jsonify(user_schema.dump(user))
+
+    @app.route('/api/auth/me', methods=['PUT'])
+    @jwt_required()
+    def update_current_user():
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+
+        data = request.get_json() or {}
         
-    user = User.query.get(user_uuid)
-    if not user:
-        return jsonify({"message": "User not found"}), 404
+        # Update user fields if provided
+        if 'first_name' in data:
+            user.first_name = data['first_name']
+        if 'last_name' in data:
+            user.last_name = data['last_name']
+        if 'email' in data and data['email'].lower() != user.email:
+            if User.query.filter_by(email=data['email'].lower()).first():
+                return jsonify({"message": "Email already in use"}), 400
+            user.email = data['email'].lower()
+        if 'password' in data and data['password']:
+            user.password_hash = hash_password(data['password'])
         
-    return jsonify(user_schema.dump(user)), 200
+        db.session.commit()
+        return jsonify(user_schema.dump(user))
 
-@auth_bp.route('/me', methods=['PUT'])
-@jwt_required()
-def update_me():
-    identity = get_jwt_identity()
-    try:
-        user_uuid = _UUID(str(identity))
-    except Exception:
-        return jsonify({"message": "Invalid token identity"}), 400
-            
-    user = User.query.get(user_uuid)
-    if not user:
-        return jsonify({"message": "User not found"}), 404
-            
-    json_data = request.get_json() or {}
-    
-    # Update allowed fields
-    if 'first_name' in json_data:
-        user.first_name = json_data['first_name']
-    if 'last_name' in json_data:
-        user.last_name = json_data['last_name']
-    if 'avatar_url' in json_data:
-        user.avatar_url = json_data['avatar_url']
-            
-    db.session.commit()
-    
-    return jsonify({"message": "Profile updated successfully", "user": user_schema.dump(user)}), 200
+    @app.route('/api/auth/register/organizer', methods=['POST'])
+    @jwt_required()
+    @role_required(['admin'])
+    def register_organizer():
+        data = request.get_json() or {}
+        errors = user_create_schema.validate(data)
+        if errors:
+            return jsonify({"errors": errors}), 400
 
-@auth_bp.route('/register-organizer', methods=['POST'])
-@jwt_required()
-def register_organizer():
-    # Check if current user is admin
-    current_user_id = get_jwt_identity()
-    current_user = User.query.get(current_user_id)
-    if not current_user or current_user.role != 'admin':
-        return jsonify({"message": "Only admin can register organizers"}), 403
+        email = data.get("email", "").lower()
+        if User.query.filter_by(email=email).first():
+            return jsonify({"message": "Email already registered"}), 400
 
-    json_data = request.get_json() or {}
-    errors = user_create_schema.validate(json_data)
-    if errors:
-        return jsonify({"errors": errors}), 400
+        user = User(
+            email=email,
+            password_hash=hash_password(data.get("password")),
+            first_name=data.get("first_name"),
+            last_name=data.get("last_name"),
+            role="organizer",
+        )
+        db.session.add(user)
+        db.session.commit()
 
-    email = json_data.get("email").lower()
-    if User.query.filter_by(email=email).first():
-        return jsonify({"message": "Email already registered"}), 400
+        # Send welcome email (fire and forget)
+        try:
+            send_welcome_email(user, is_organizer=True)
+        except Exception as e:
+            current_app.logger.error(f"Failed to send welcome email: {str(e)}")
 
-    pw_hash = hash_password(json_data.get("password"))
-    user = User(
-        email=email,
-        password_hash=pw_hash,
-        first_name=json_data.get("first_name"),
-        last_name=json_data.get("last_name"),
-        role="organizer",
-        organization=json_data.get("organization")
-    )
-    db.session.add(user)
-    db.session.commit()
+        return jsonify(user_schema.dump(user)), 201
 
-    # Send welcome email to organizer
-    try:
-        send_welcome_email(user)
-    except Exception as e:
-        from flask import current_app
-        current_app.logger.error(f"Failed to send welcome email to organizer: {str(e)}")
-
-    token = create_access_token(
-        identity=str(user.id), additional_claims={"role": user.role}
-    )
-    return jsonify({"token": token, "user": user_schema.dump(user)}), 201
+    return app

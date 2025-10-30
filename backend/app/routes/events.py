@@ -1,13 +1,7 @@
 from uuid import UUID as _UUID
 
-from flask import Blueprint, current_app, request
-from flask_restful import Api, Resource
-from flask_jwt_extended import (
-    get_jwt,
-    get_jwt_identity,
-    jwt_required,
-    verify_jwt_in_request,
-)
+from flask import current_app, request, jsonify
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import or_
 
 from ..extensions import db
@@ -26,16 +20,15 @@ events_schema = EventSchema(many=True)
 event_create_schema = EventCreateSchema()
 event_update_schema = EventUpdateSchema()
 
-
 def _parse_uuid(value):
     try:
         return _UUID(str(value))
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
         return None
 
-
-class EventsListResource(Resource):
-    def get(self):
+def init_app(app):
+    @app.route('/api/events', methods=['GET'])
+    def get_events():
         try:
             page, per_page = get_pagination_params()
             q = (request.args.get("q") or "").strip()
@@ -95,8 +88,9 @@ class EventsListResource(Resource):
             current_app.logger.exception("events.list failed")
             return {"message": "Internal Server Error"}, 500
 
+    @app.route('/api/events', methods=['POST'])
     @jwt_required()
-    def post(self):
+    def create_event():
         claims = get_jwt()
         role = claims.get("role")
         organizer_id = _parse_uuid(get_jwt_identity())
@@ -125,9 +119,8 @@ class EventsListResource(Resource):
         )
         return {"event": event_schema.dump(ev)}, 201
 
-
-class EventResource(Resource):
-    def get(self, event_id):
+    @app.route('/api/events/<event_id>', methods=['GET'])
+    def get_event(event_id):
         eid = _parse_uuid(event_id)
         if not eid:
             return {"message": "Invalid id"}, 400
@@ -136,8 +129,9 @@ class EventResource(Resource):
             return {"message": "Not found"}, 404
         return {"event": event_schema.dump(ev)}, 200
 
+    @app.route('/api/events/<event_id>', methods=['PUT'])
     @jwt_required()
-    def put(self, event_id):
+    def update_event(event_id):
         eid = _parse_uuid(event_id)
         if not eid:
             return {"message": "Invalid id"}, 400

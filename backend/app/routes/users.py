@@ -1,16 +1,14 @@
 from uuid import UUID as _UUID
 
-from flask import Blueprint, request
+from flask import request, jsonify
 from flask_jwt_extended import get_jwt, jwt_required
-from flask_restful import Api, Resource
 
 from ..extensions import db
-from ..models import User
+from ..models.user import User
 from ..schemas import UserSchema
 
 user_schema = UserSchema()
 users_schema = UserSchema(many=True)
-
 
 def _uuid(v):
     try:
@@ -18,44 +16,41 @@ def _uuid(v):
     except Exception:
         return None
 
-
-class UsersListResource(Resource):
+def init_app(app):
+    @app.route('/api/users', methods=['GET'])
     @jwt_required()
-    def get(self):
+    def get_users():
         claims = get_jwt()
         role = claims.get("role")
         if role != "admin":
-            return {"message": "Forbidden"}, 403
+            return jsonify({"message": "Forbidden"}), 403
+            
         users = User.query.order_by(User.created_at.desc()).all()
-        return {"users": users_schema.dump(users)}, 200
+        return jsonify({"users": users_schema.dump(users)})
 
-
-class UserRoleResource(Resource):
+    @app.route('/api/users/<user_id>/role', methods=['PUT'])
     @jwt_required()
-    def put(self, user_id):
+    def update_user_role(user_id):
         claims = get_jwt()
-        role = claims.get("role")
-        if role != "admin":
-            return {"message": "Forbidden"}, 403
-        uid = _uuid(user_id)
-        if not uid:
-            return {"message": "Invalid user id"}, 400
-        user = User.query.get(uid)
+        if claims.get("role") != "admin":
+            return jsonify({"message": "Forbidden"}), 403
+            
+        user = User.query.get(_uuid(user_id))
         if not user:
-            return {"message": "User not found"}, 404
+            return jsonify({"message": "User not found"}), 404
+            
         data = request.get_json() or {}
         new_role = data.get("role")
-        if new_role not in ("admin", "organizer", "user"):
-            return {"message": "Invalid role"}, 400
+        
+        if new_role not in ["user", "organizer", "admin"]:
+            return jsonify({"message": "Invalid role"}), 400
+            
         user.role = new_role
         db.session.commit()
-        return {"user": user_schema.dump(user)}, 200
+        
+        return jsonify({
+            "message": "User role updated successfully", 
+            "user": user_schema.dump(user)
+        })
 
-
-# Create the users blueprint
-users_bp = Blueprint('users', __name__)
-api = Api(users_bp)
-
-# Add resources to the API
-api.add_resource(UsersListResource, '')
-api.add_resource(UserRoleResource, '/<string:user_id>/role')
+    return app

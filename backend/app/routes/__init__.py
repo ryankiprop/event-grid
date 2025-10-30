@@ -1,24 +1,24 @@
-from flask import Blueprint
-from .auth import auth_bp
-from .events import events_bp
-from .orders import orders_bp
-from .payments import payments_bp
-from .dashboard import dashboard_bp
-# Import other blueprints as they are converted
-# from .tickets import tickets_bp
-# from .uploads import uploads_bp
-# from .users import users_bp
+from .auth import init_app as init_auth
+from .events import init_app as init_events
+from .orders import init_app as init_orders
+from .payments import init_app as init_payments
+from .dashboard import init_app as init_dashboard
+from .tickets import init_app as init_tickets
+from .uploads import init_app as init_uploads
+from .users import init_app as init_users
+from .swagger import init_app as init_swagger
 
-def register_routes(app):
-    """Register all routes with the Flask app."""
-    # Register API blueprints with their respective URL prefixes
-    app.register_blueprint(auth_bp, url_prefix='/api')
-    app.register_blueprint(events_bp, url_prefix='/api')
-    app.register_blueprint(orders_bp, url_prefix='/api')
-    app.register_blueprint(payments_bp, url_prefix='/api')
-    app.register_blueprint(dashboard_bp, url_prefix='/api')
+def init_app(app):
+    """Initialize all routes with the Flask app."""
+    # Initialize all route modules
+    init_auth(app)
+    init_events(app)
+    init_orders(app)
+    init_payments(app)
+    init_dashboard(app)
+    init_tickets(app)
+    init_uploads(app)
+    init_users(app)
+    init_swagger(app)
     
-    # Register other blueprints as they are converted
-    # app.register_blueprint(tickets_bp, url_prefix='/api')
-    # app.register_blueprint(uploads_bp, url_prefix='/api')
-    # app.register_blueprint(users_bp, url_prefix='/api')
+    return app
