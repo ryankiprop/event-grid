@@ -51,23 +51,49 @@ export default function EventDetails () {
 
   const onPurchase = async () => {
     if (!user) {
-      setStatus({ err: 'Please login to purchase tickets.' })
-      return
+      setStatus({ err: 'Please login to get tickets.' });
+      navigate('/login', { state: { from: `/events/${id}` } });
+      return;
     }
+    
     if (!cartItems.length) {
-      setStatus({ err: 'Select at least one ticket.' })
-      return
+      setStatus({ err: 'Please select at least one ticket.' });
+      return;
     }
-    setSubmitting(true)
-    setStatus(null)
+
+    setSubmitting(true);
+    setStatus(null);
+
     try {
-      const res = await createOrder({ event_id: event.id, items: cartItems })
-      setCartItems([])
-      navigate(`/orders/${res.order.id}/confirmation`)
-    } catch (e) {
-      setStatus({ err: e?.response?.data?.message || 'Checkout failed' })
+      // Prepare the order data
+      const orderData = {
+        event_id: event.id,
+        items: cartItems.map(item => ({
+          ticket_type_id: item.ticket_type_id || item.id,
+          quantity: parseInt(item.quantity) || 1
+        }))
+      };
+
+      // Create the order
+      const response = await createOrder(orderData);
+      
+      // Clear the cart
+      setCartItems([]);
+      
+      // Navigate to the tickets dashboard or order confirmation
+      if (response && response.id) {
+        navigate(`/dashboard/tickets`);
+      } else {
+        throw new Error('Invalid response from server');
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      const errorMessage = error?.response?.data?.message || 
+                         error?.message || 
+                         'Failed to process your request. Please try again.';
+      setStatus({ err: errorMessage });
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
