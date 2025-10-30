@@ -37,7 +37,7 @@ export default function TicketSelector ({ eventId, onChange }) {
   useEffect(() => {
     const items = Object.entries(quantities)
       .filter(([, q]) => q > 0)
-      .map(([ticketTypeId, quantity]) => ({ ticketTypeId, quantity }))
+      .map(([ticket_type_id, quantity]) => ({ ticket_type_id, quantity }))
     onChange?.(items, tickets)
   }, [quantities, onChange, tickets])
 
