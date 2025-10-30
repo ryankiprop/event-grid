@@ -41,7 +41,7 @@ class OrderItem(db.Model):
     )
     quantity = db.Column(db.Integer, nullable=False, default=1)
     unit_price = db.Column(db.Integer, nullable=False, default=0)  # in cents
-    qr_code = db.Column(db.String(255))
+    qr_code = db.Column(db.Text)
     checked_in = db.Column(db.Boolean, default=False, nullable=False)
     checked_in_at = db.Column(db.DateTime)
     checked_in_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"))

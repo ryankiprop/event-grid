@@ -9,6 +9,7 @@ from .models.order import Order, OrderItem
 from .models.ticket import TicketType
 from .models.user import User
 from .utils.auth import hash_password
+from .utils.qrcode_util import build_ticket_qr_payload
 
 
 def _get_or_create_user(email, role, first_name, last_name, password):
@@ -80,6 +81,18 @@ def _create_order(user, event, items_specs):
         total += ticket_type.price * qty
         ticket_type.quantity_sold = (ticket_type.quantity_sold or 0) + qty
         db.session.add(oi)
+        db.session.flush()
+        if not oi.qr_code:
+            oi.qr_code = build_ticket_qr_payload(
+                order_id=order.id,
+                item_id=oi.id,
+                user_id=user.id,
+                event_id=event.id,
+                event_title=event.title,
+                event_start_date_iso=(event.start_date.isoformat() if getattr(event, "start_date", None) else None),
+                ticket_type_id=ticket_type.id,
+                ticket_type_name=ticket_type.name,
+            )
     order.total_amount = total
     db.session.commit()
     return order

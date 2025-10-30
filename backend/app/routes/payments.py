@@ -9,7 +9,7 @@ from ..extensions import db
 from ..models import Event, Order, OrderItem, TicketType
 from ..models.payment import Payment
 from ..utils.mpesa import initiate_stk_push
-from ..utils.qrcode_util import generate_ticket_qr
+from ..utils.qrcode_util import build_ticket_qr_payload
 
 
 def _uuid(v):
@@ -44,12 +44,19 @@ class MpesaInitiateResource(Resource):
         db.session.flush()
 
         total = 0
-        for it in items:
+        for idx, it in enumerate(items):
             tt_id = _uuid(it.get("ticket_type_id"))
-            qty = int(it.get("quantity") or 0)
-            if not tt_id or qty <= 0:
+            qty_raw = it.get("quantity")
+            try:
+                qty = int(qty_raw or 0)
+            except Exception:
+                qty = 0
+            if not tt_id:
                 db.session.rollback()
-                return {"message": "Invalid ticket item"}, 400
+                return {"message": f"Invalid ticket_type_id at index {idx}"}, 400
+            if qty <= 0:
+                db.session.rollback()
+                return {"message": f"Invalid quantity at index {idx}"}, 400
             tt = TicketType.query.get(tt_id)
             if not tt or tt.event_id != event.id:
                 db.session.rollback()
@@ -167,18 +174,28 @@ class MpesaCallbackResource(Resource):
                     for oi in order.items:
                         if not oi.qr_code:
                             current_app.logger.info(f"Generating QR code for order item {oi.id}")
-                            qr_code = generate_ticket_qr(order.id, oi.id, order.user_id)
+                            tt = TicketType.query.get(oi.ticket_type_id)
+                            qr_code = build_ticket_qr_payload(
+                                order_id=order.id,
+                                item_id=oi.id,
+                                user_id=order.user_id,
+                                event_id=order.event_id,
+                                event_title=(order.event.title if getattr(order, "event", None) else None),
+                                event_start_date_iso=(order.event.start_date.isoformat() if getattr(getattr(order, "event", None), "start_date", None) else None),
+                                ticket_type_id=(tt.id if tt else None),
+                                ticket_type_name=(tt.name if tt else None),
+                            )
                             if not qr_code:
                                 current_app.logger.error(f"Failed to generate QR code for order item {oi.id}")
                             else:
                                 oi.qr_code = qr_code
                                 current_app.logger.info(f"QR code generated for order item {oi.id}")
-                        
+
                         # Update ticket type sold count
-                        tt = TicketType.query.get(oi.ticket_type_id)
-                        if tt:
-                            tt.quantity_sold = (tt.quantity_sold or 0) + (oi.quantity or 0)
-                            current_app.logger.info(f"Updated quantity_sold for ticket type {tt.id} to {tt.quantity_sold}")
+                        tt2 = tt if 'tt' in locals() else TicketType.query.get(oi.ticket_type_id)
+                        if tt2:
+                            tt2.quantity_sold = (tt2.quantity_sold or 0) + (oi.quantity or 0)
+                            current_app.logger.info(f"Updated quantity_sold for ticket type {tt2.id} to {tt2.quantity_sold}")
                     
                     # Commit after all updates
                     db.session.commit()

@@ -1,4 +1,5 @@
 from marshmallow import Schema, fields
+from ..utils.qrcode_util import generate_ticket_qr
 
 
 class OrderItemSchema(Schema):

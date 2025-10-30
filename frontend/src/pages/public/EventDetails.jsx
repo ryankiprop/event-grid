@@ -66,8 +66,7 @@ export default function EventDetails () {
     try {
       const res = await initiateMpesa({ event_id: event.id, phone: phone.trim(), items: cartItems })
       const pid = res?.payment?.id
-      const oid = res?.order?.id
-      setMpesaPaymentId(pid)
+      const oid = res?.payment?.order_id
       // poll status until success/failed or timeout ~2 minutes
       const started = Date.now()
       const poll = async () => {

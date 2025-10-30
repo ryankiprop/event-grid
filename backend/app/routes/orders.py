@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from uuid import UUID as _UUID
+import json
 
 from flask import request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
@@ -11,7 +12,7 @@ from ..extensions import db
 from ..models import Event, Order, OrderItem, TicketType, User
 from ..schemas.order_schema import CreateOrderSchema, OrderSchema
 from ..utils.email import send_order_confirmation
-from ..utils.qrcode_util import generate_ticket_qr
+from ..utils.qrcode_util import build_ticket_qr_payload
 
 order_schema = OrderSchema()
 orders_schema = OrderSchema(many=True)
@@ -75,7 +76,16 @@ class OrdersResource(Resource):
             )
             db.session.add(oi)
             db.session.flush()  # get oi.id
-            oi.qr_code = generate_ticket_qr(order.id, oi.id, user_id)
+            oi.qr_code = build_ticket_qr_payload(
+                order_id=order.id,
+                item_id=oi.id,
+                user_id=user_id,
+                event_id=event.id,
+                event_title=event.title,
+                event_start_date_iso=(event.start_date.isoformat() if getattr(event, "start_date", None) else None),
+                ticket_type_id=tt.id,
+                ticket_type_name=tt.name,
+            )
             tt.quantity_sold = (tt.quantity_sold or 0) + qty
         order.total_amount = total
         db.session.commit()
@@ -150,16 +160,46 @@ class VerifyCheckinResource(Resource):
         if role not in ("organizer", "admin"):
             return {"valid": False, "message": "Forbidden"}, 403
 
-        # Find order item with matching QR code for this event
+        # First: try exact match
         oi = (
             OrderItem.query.join(Order)
             .filter(Order.event_id == event_id)
             .filter(OrderItem.qr_code == code)
             .first()
         )
+        # Fallback: decode as JSON QR and try the 'code' property
+        if not oi:
+            try:
+                qr_payload = json.loads(code)
+                inner_code = qr_payload.get("code")
+                if inner_code:
+                    oi = (
+                        OrderItem.query.join(Order)
+                        .filter(Order.event_id == event_id)
+                        .filter(OrderItem.qr_code == inner_code)
+                        .first()
+                    )
+            except Exception:
+                pass
 
         if not oi:
-            return {"valid": False, "message": "Invalid code"}, 404
+            # (rest unchanged: fallback try code as an Order ID for backwards compatibility)
+            oid = _uuid(code)
+            if oid:
+                order = Order.query.get(oid)
+                if not order or order.event_id != event_id:
+                    return {"valid": False, "message": "Order not found for this event"}, 404
+                # pick first not-checked-in item from this order
+                oi = (
+                    OrderItem.query
+                    .filter(OrderItem.order_id == order.id)
+                    .filter(OrderItem.checked_in == False)  # noqa: E712
+                    .first()
+                )
+                if not oi:
+                    return {"valid": False, "message": "All tickets for this order have been checked in"}, 400
+            else:
+                return {"valid": False, "message": "Invalid code"}, 404
 
         # Check if user has permission for this event
         if role == "organizer" and oi.order.event.organizer_id != uid:
@@ -208,16 +248,45 @@ class MarkCheckinResource(Resource):
         if role not in ("organizer", "admin"):
             return {"message": "Forbidden"}, 403
 
-        # Find order item with matching QR code for this event
+        # First: exact match
         oi = (
             OrderItem.query.join(Order)
             .filter(Order.event_id == event_id)
             .filter(OrderItem.qr_code == code)
             .first()
         )
+        # Fallback: decode as JSON QR and try the 'code' property
+        if not oi:
+            try:
+                qr_payload = json.loads(code)
+                inner_code = qr_payload.get("code")
+                if inner_code:
+                    oi = (
+                        OrderItem.query.join(Order)
+                        .filter(Order.event_id == event_id)
+                        .filter(OrderItem.qr_code == inner_code)
+                        .first()
+                    )
+            except Exception:
+                pass
 
         if not oi:
-            return {"message": "Invalid code"}, 404
+            # Fallback: treat code as order ID (legacy)
+            oid = _uuid(code)
+            if oid:
+                order = Order.query.get(oid)
+                if not order or order.event_id != event_id:
+                    return {"message": "Order not found for this event"}, 404
+                oi = (
+                    OrderItem.query
+                    .filter(OrderItem.order_id == order.id)
+                    .filter(OrderItem.checked_in == False)  # noqa: E712
+                    .first()
+                )
+                if not oi:
+                    return {"message": "All tickets already checked in", "already": True}, 400
+            else:
+                return {"message": "Invalid code"}, 404
 
         # Check if user has permission for this event
         if role == "organizer" and oi.order.event.organizer_id != uid:

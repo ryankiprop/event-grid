@@ -114,12 +114,39 @@ export default function Checkin () {
     setScanning(false)
   }
 
+  const scanImageFile = async (e) => {
+    try {
+      setError(null)
+      setResult(null)
+      const file = (e.target.files && e.target.files[0]) || null
+      if (!file) return
+      if (!scriptLoaded || !window.Html5Qrcode) {
+        setError('Scanner is still loading. Please wait a moment and try again.')
+        return
+      }
+      if (!html5qrcodeRef.current) html5qrcodeRef.current = new window.Html5Qrcode('qr-region')
+      if (html5qrcodeRef.current.isScanning) {
+        try { await html5qrcodeRef.current.stop() } catch {}
+        setScanning(false)
+      }
+      const decodedText = await html5qrcodeRef.current.scanFile(file, true)
+      setCode(decodedText)
+      setLoading(true)
+      const res = await api.post('/checkin/verify', { event_id: id, code: decodedText })
+      setResult(res.data)
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || 'Failed to decode QR from image')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className='max-w-3xl mx-auto p-4'>
       <div className='mb-4'><Link to='/dashboard/my-events' className='text-primary-600'>← Back to My Events</Link></div>
       <h1 className='text-2xl font-semibold mb-4'>Check-in</h1>
       <form onSubmit={onVerify} className='flex items-center gap-2 mb-4'>
-        <input className='flex-1 border rounded px-3 py-2' placeholder='Scan or paste code' value={code} onChange={e => setCode(e.target.value)} />
+        <input className='flex-1 border rounded px-3 py-2' placeholder='Scan/upload or paste QR code' value={code} onChange={e => setCode(e.target.value)} />
         <button type='submit' disabled={loading || !code.trim()} className='bg-primary-600 text-white px-4 py-2 rounded'>{loading ? 'Verifying...' : 'Verify'}</button>
       </form>
       <div className='mb-3 flex items-center gap-2'>
@@ -130,6 +157,9 @@ export default function Checkin () {
           : (
             <button onClick={stopScan} className='px-3 py-2 border rounded'>Stop Camera</button>
             )}
+      </div>
+      <div className='mb-3'>
+        <input type='file' accept='image/*' onChange={scanImageFile} className='block' />
       </div>
       <div id='qr-region' className='w-full max-w-md aspect-square bg-black/10 rounded mb-4' />
       {error && <div className='text-red-600 mb-2'>{error}</div>}

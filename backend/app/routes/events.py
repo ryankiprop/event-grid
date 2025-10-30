@@ -42,11 +42,35 @@ class EventsListResource(Resource):
                 query = query.filter(
                     or_(
                         Event.title.ilike(like),
+                        Event.description.ilike(like),  # Add description to search
                         Event.category.ilike(like),
                         Event.venue_name.ilike(like),
                         Event.address.ilike(like),
                     )
                 )
+            # Filter by category
+            category = (request.args.get("category") or "").strip()
+            if category:
+                query = query.filter(Event.category == category)
+            # Filter by date range
+            start_date = request.args.get("start_date")
+            end_date = request.args.get("end_date")
+            if start_date:
+                query = query.filter(Event.start_date >= start_date)
+            if end_date:
+                query = query.filter(Event.end_date <= end_date)
+            # Filter by price using min_ticket_price and max_ticket_price
+            try:
+                min_price = int(request.args.get("min_price") or 0)
+                query = query.join(Event.ticket_types).filter(TicketType.price >= min_price)
+            except Exception:
+                pass
+            try:
+                max_price = int(request.args.get("max_price") or 0)
+                if max_price > 0:
+                    query = query.join(Event.ticket_types).filter(TicketType.price <= max_price)
+            except Exception:
+                pass
             if mine:
                 try:
                     verify_jwt_in_request()
