@@ -16,27 +16,40 @@ const CheckoutForm = ({ cart, onSuccess }) => {
     try {
       setIsLoading(true);
       
-      // Prepare order items
-      const orderItems = cart.map(item => ({
-        ticket_type_id: item.id,
-        quantity: item.quantity || 1
-      }));
+      // Prepare order items with proper validation
+      const orderItems = cart.map(item => {
+        console.log('Processing cart item:', item);
+        
+        // Ensure we have the required fields
+        if (!item.id || !item.quantity) {
+          console.error('Invalid item format:', item);
+          throw new Error('One or more items in your cart are invalid');
+        }
+
+        return {
+          ticket_type_id: item.id,
+          quantity: parseInt(item.quantity) || 1
+        };
+      });
 
       const eventId = cart[0]?.event_id;
       if (!eventId) {
         throw new Error('No event ID found in cart');
       }
 
-      // Simple order payload
-      const orderData = {
+      // Log the data we're about to send
+      console.log('Sending order data:', {
         event_id: eventId,
         items: orderItems
-      };
+      });
 
-      console.log('Creating order:', orderData);
+      const response = await api.post('/orders', {
+        event_id: eventId,
+        items: orderItems
+      });
       
-      const response = await api.post('/orders', orderData);
       const order = response.data;
+      console.log('Order response:', order);
 
       if (order && order.order_id) {
         toast.success('Registration successful!');
@@ -44,10 +57,22 @@ const CheckoutForm = ({ cart, onSuccess }) => {
           onSuccess({ order_id: order.order_id });
         }
         navigate(`/orders/${order.order_id}/confirmation`);
+      } else {
+        throw new Error('Invalid response from server');
       }
     } catch (error) {
-      console.error('Checkout error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to complete registration. Please try again.';
+      console.error('Checkout error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      let errorMessage = 'Failed to complete registration. Please try again.';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
