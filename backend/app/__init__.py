@@ -52,17 +52,37 @@ def create_app():
         headers_enabled=True
     )
     
+    # CORS Configuration
+    CORS_ORIGINS = [
+        "https://event-grid-gilt.vercel.app",
+        "http://localhost:3000"  # For local development
+    ]
+    
     CORS(
         app,
         resources={
             r"/api/*": {
-                "origins": app.config["CORS_ORIGINS"],
+                "origins": CORS_ORIGINS,
                 "supports_credentials": True,
-                "allow_headers": ["Content-Type", "Authorization"],
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+                "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                "expose_headers": ["Content-Range", "X-Total-Count"],
             }
-        }
+        },
+        supports_credentials=True
     )
+    
+    # Add CORS headers to all responses
+    @app.after_request
+    def after_request(response):
+        # Only add CORS headers if the request is from an allowed origin
+        origin = request.headers.get('Origin')
+        if origin in CORS_ORIGINS:
+            response.headers.add('Access-Control-Allow-Origin', origin)
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
     
     # Initialize database and migrations
     db.init_app(app)
