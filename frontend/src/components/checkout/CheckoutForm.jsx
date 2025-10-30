@@ -7,16 +7,22 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
   const handleFreeCheckout = async () => {
     try {
       setIsLoading(true);
+      console.log('Starting free checkout with cart:', cart);
       
       // Validate cart has items
       if (!cart || cart.length === 0) {
-        throw new Error('No items in cart');
+        const error = new Error('No items in cart');
+        console.error('Checkout error - empty cart');
+        throw error;
       }
 
       // Create order items array for the backend
       const orderItems = cart.map(item => {
+        console.log('Processing cart item:', item);
         if (!item.id || !item.quantity) {
-          throw new Error('Invalid cart item format');
+          const error = new Error(`Invalid cart item format: ${JSON.stringify(item)}`);
+          console.error('Checkout error - invalid item format', error);
+          throw error;
         }
         return {
           ticket_type_id: item.id,
@@ -27,35 +33,67 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
       // Get event ID from the first item in cart
       const eventId = cart[0]?.event_id;
       if (!eventId) {
-        throw new Error('No event ID found in cart');
+        const error = new Error('No event ID found in cart');
+        console.error('Checkout error - missing event ID', error);
+        throw error;
       }
 
-      console.log('Creating order with:', {
+      const orderData = {
         event_id: eventId,
         items: orderItems,
         payment_method: 'free'
-      });
+      };
 
-      // Call the free checkout endpoint
-      const response = await api.post('/orders', {
-        event_id: eventId,
-        items: orderItems,
-        payment_method: 'free'
-      });
+      console.log('Sending order request:', orderData);
 
-      const order = response.data;
-      
-      if (order) {
-        toast.success('Registration completed successfully!');
-        if (onSuccess) {
-          onSuccess({ order_id: order.id });
-        }
-        // Redirect to confirmation page with order ID
-        navigate(`/orders/${order.id}/confirmation`);
+      try {
+        // Call the free checkout endpoint
+        const response = await api.post('/orders', orderData);
+        console.log('Order created successfully:', response.data);
+        return response.data;
+      } catch (apiError) {
+        console.error('API Error:', {
+          message: apiError.message,
+          response: apiError.response?.data,
+          status: apiError.response?.status,
+          headers: apiError.response?.headers
+        });
+        throw apiError;
       }
     } catch (error) {
       console.error('Free checkout error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to complete registration. Please try again.';
+      
+      // More detailed error handling
+      let errorMessage = 'Failed to complete registration. Please try again.';
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+        
+        if (error.response.status === 400) {
+          errorMessage = 'Invalid request. Please check your information and try again.';
+          if (error.response.data?.errors) {
+            errorMessage = Object.values(error.response.data.errors).flat().join(' ');
+          }
+        } else if (error.response.status === 401) {
+          errorMessage = 'Please log in to continue.';
+        } else if (error.response.status === 404) {
+          errorMessage = 'The requested resource was not found.';
+        } else if (error.response.status >= 500) {
+          errorMessage = 'A server error occurred. Please try again later.';
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error('No response received:', error.request);
+        errorMessage = 'No response from server. Please check your connection and try again.';
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        console.error('Error:', error.message);
+        errorMessage = error.message || 'An unexpected error occurred.';
+      }
+      
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
