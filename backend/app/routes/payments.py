@@ -105,11 +105,10 @@ def init_app(app):
                 phone_msisdn=phone,
                 amount_kes=total_amount,
                 account_ref=f"EVENT{event_id}",
-                description=f"Tickets for {event.title}",
+                description=f"Payment for {event.title}",
                 amount=total_amount,
                 account_reference=f"EVENT-{event.id}",
-                callback_url=f"{app.config.get('BASE_URL')}/api/payments/mpesa/callback",
-                description=f"Payment for {event.title}",
+                callback_url=f"{app.config.get('BASE_URL')}/api/payments/mpesa/callback"
             )
             payment.provider_reference = response.get("CheckoutRequestID")
             db.session.commit()
