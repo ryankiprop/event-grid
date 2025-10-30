@@ -21,14 +21,20 @@ const CheckoutForm = ({ cart, onSuccess }) => {
         throw new Error('Invalid event');
       }
 
-      // Create order with selected tickets
-      await createOrder({
+      // Format the order data
+      const orderData = {
         event_id: eventId,
         items: cart.map(item => ({
-          ticket_type_id: item.id,
+          ticket_type_id: item.ticket_type_id || item.id, // Use ticket_type_id if available, fallback to id
           quantity: parseInt(item.quantity) || 1
-        }))
-      });
+        })).filter(item => item.ticket_type_id) // Filter out any items without an ID
+      };
+
+      console.log('Creating order with data:', orderData);
+      
+      // Create order with selected tickets
+      const response = await createOrder(orderData);
+      console.log('Order created:', response);
 
       // Redirect to tickets dashboard
       navigate('/dashboard/tickets');
