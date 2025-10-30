@@ -102,15 +102,9 @@ export default function EventDetails () {
                   <button 
                     onClick={onPurchase} 
                     disabled={submitting}
-                    className={`w-full py-3 px-4 rounded-md font-medium text-white transition-colors ${totalCents > 0 ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'} ${(submitting) ? 'opacity-75 cursor-not-allowed' : ''}`}
+                    className={`w-full py-3 px-4 rounded-md font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors ${submitting ? 'opacity-75 cursor-not-allowed' : ''}`}
                   >
-                    {submitting ? (
-                      'Processing...'
-                    ) : totalCents > 0 ? (
-                      'Complete Free Registration'
-                    ) : (
-                      'Get Free Ticket'
-                    )}
+                    {submitting ? 'Processing...' : 'Get Tickets'}
                   </button>
                   
                 </div>
