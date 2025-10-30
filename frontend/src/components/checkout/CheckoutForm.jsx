@@ -61,71 +61,22 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
     }).format(amount);
   };
 
+  // Handle form submission - only free checkout is available
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!phone) {
-      toast.error('Please enter your phone number');
+    // Show message that M-Pesa is disabled
+    if (e.nativeEvent.submitter?.textContent?.includes('M-Pesa')) {
+      toast.info('M-Pesa payment is currently disabled. Please use free checkout.');
       return;
     }
-
-    // Basic phone number validation
-    const phoneRegex = /^(?:254|0)?[17]\d{8}$/;
-    if (!phoneRegex.test(phone)) {
-      toast.error('Please enter a valid Kenyan phone number (e.g., 0712345678 or 254712345678)');
-      return;
-    }
-
-    setIsLoading(true);
     
     try {
-      // Format phone number to 2547XXXXXXXX
-      const formattedPhone = phone.startsWith('0') 
-        ? '254' + phone.substring(1) 
-        : phone.startsWith('+254') 
-          ? phone.substring(1) 
-          : phone.startsWith('254') 
-            ? phone 
-            : '254' + phone;
-
-      // Create order items array for the backend
-      const orderItems = cart.map(item => ({
-        ticket_type_id: item.id,
-        quantity: item.quantity
-      }));
-
-      // Get event ID from the first item in cart
-      const eventId = cart[0]?.event_id;
-      if (!eventId) {
-        throw new Error('No event ID found in cart');
-      }
-
-      // Call the payment initiation endpoint
-      const response = await api.post('/payments/mpesa/initiate', {
-        phone: formattedPhone,
-        event_id: eventId,
-        items: orderItems
-      });
-
-      const { payment } = response.data;
-      
-      if (payment && payment.checkout_request_id) {
-        // Show success message
-        toast.success('Payment initiated. Please check your phone to complete the payment.');
-        
-        // Call the success callback if provided
-        if (onSuccess) {
-          onSuccess(payment);
-        }
-        
-        // Redirect to order status page
-        navigate(`/orders/${payment.order_id}?checkout_request_id=${payment.checkout_request_id}`);
-      } else {
-        throw new Error('Failed to initiate payment');
-      }
+      setIsLoading(true);
+      await handleFreeCheckout();
     } catch (error) {
-      console.error('Payment error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to initiate payment. Please try again.';
+      console.error('Checkout error:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to complete registration. Please try again.';
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -201,23 +152,16 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
           <div className="pt-4">
             {total > 0 ? (
               <>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 ${isLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
-                >
-                  {isLoading ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Processing...
-                    </>
-                  ) : (
-                    'Pay with M-Pesa'
-                  )}
-                </button>
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gray-200 opacity-50 rounded-md"></div>
+                  <button
+                    type="button"
+                    disabled
+                    className="relative w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-gray-500 bg-gray-200 cursor-not-allowed"
+                  >
+                    M-Pesa (Temporarily Unavailable)
+                  </button>
+                </div>
                 
                 <div className="relative my-4">
                   <div className="absolute inset-0 flex items-center">

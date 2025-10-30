@@ -32,12 +32,9 @@ def init_app(app):
     def create_order():
         data = request.get_json() or {}
         
-        # Skip FREE_MODE check if payment_method is 'free'
-        payment_method = data.get('payment_method', '').lower()
-        if not FREE_MODE and payment_method != 'free':
-            return jsonify({
-                "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
-            }), 400
+        # Always allow direct checkout, ignore payment method for now
+        payment_method = 'free'  # Force free checkout
+        data['payment_method'] = payment_method  # Ensure payment method is set
             
         errors = create_order_schema.validate(data)
         if errors:
