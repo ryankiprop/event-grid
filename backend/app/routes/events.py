@@ -1,13 +1,13 @@
 from uuid import UUID as _UUID
 
-from flask import current_app, request
+from flask import Blueprint, current_app, request
+from flask_restful import Api, Resource
 from flask_jwt_extended import (
     get_jwt,
     get_jwt_identity,
     jwt_required,
     verify_jwt_in_request,
 )
-from flask_restful import Resource
 from sqlalchemy import or_
 
 from ..extensions import db
@@ -244,3 +244,13 @@ class EventStatsResource(Resource):
                 "revenue_cents": revenue_cents,
             }
         }, 200
+
+
+# Create the events blueprint
+events_bp = Blueprint('events', __name__)
+api = Api(events_bp)
+
+# Add resources to the API
+api.add_resource(EventsListResource, '/events')
+api.add_resource(EventResource, '/events/<string:event_id>')
+api.add_resource(EventStatsResource, '/events/<string:event_id>/stats')
