@@ -1,6 +1,6 @@
 def init_app(app):
     # Import routes to register them with the app
-    from .routes import auth, events, orders, users, uploads, dashboard, payments
+    from .routes import auth, events, orders, users, uploads, dashboard, payments, tickets
     
     # Initialize routes
     auth.init_app(app)
@@ -10,5 +10,6 @@ def init_app(app):
     uploads.init_app(app)
     dashboard.init_app(app)
     payments.init_app(app)
+    tickets.init_app(app)  # Initialize tickets routes
     
     return app
