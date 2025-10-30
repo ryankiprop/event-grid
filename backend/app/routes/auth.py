@@ -86,7 +86,7 @@ def init_app(app):
 
         access_token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
         return jsonify({
-            "access_token": access_token,
+            "token": access_token,  # Changed from access_token to token to match frontend
             "user": user_schema.dump(user)
         }), 200
 
