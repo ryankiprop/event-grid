@@ -135,7 +135,7 @@ export default function UserDashboard() {
         </div>
       ) : (
         <div className="space-y-6">
-          {orders.flatMap(order => 
+          {orders.map((ticket) => (
             <div key={ticket.uniqueId} className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <div className="p-4 border-b">
                 <div className="flex justify-between items-start">
