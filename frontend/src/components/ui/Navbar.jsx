@@ -29,10 +29,8 @@ export default function Navbar () {
           )}
           {user && (
             <>
-              {/* Show Dashboard only for organizers and admins */}
-              {(user.role === 'organizer' || user.role === 'admin') && (
-                <Link to='/dashboard' className='text-sm hover:text-primary-700 transition'>Dashboard</Link>
-              )}
+              {/* Show Dashboard for all authenticated users */}
+              <Link to='/dashboard' className='text-sm hover:text-primary-700 transition'>Dashboard</Link>
               
               {/* Role-based quick links */}
               {user.role === 'organizer' && (

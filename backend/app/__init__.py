@@ -17,7 +17,7 @@ from .extensions import db, jwt, migrate
 from .models.payment import Payment
 
 # Import API after app to avoid circular imports
-from .api import api
+from .api import api, init_app as init_api
 
 def create_app():
     app = Flask(__name__)
@@ -43,9 +43,13 @@ def create_app():
         }
     )
     
+    # Initialize database and migrations
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    
+    # Initialize API with blueprints
+    app = init_api(app)
 
     def _called_from_alembic_env():
         try:
