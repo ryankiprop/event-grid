@@ -74,9 +74,6 @@ def create_app():
         except Exception as e:
             app.logger.error(f"Migration failed: {str(e)}")
 
-    # Initialize API
-    api.init_app(app)
-
     # Create upload folder if it doesn't exist
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
