@@ -65,7 +65,7 @@ Explore our live demo:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/event-grid.git
+   git clone https://github.com/ryankiprop/event-grid.git
    cd event-grid/backend
    ```
 
