@@ -38,7 +38,7 @@ Explore our live demo:
 - **Framework**: [Python Flask](https://flask.palletsprojects.com/)
 - **Database**: [PostgreSQL](https://www.postgresql.org/) with [SQLAlchemy ORM](https://www.sqlalchemy.org/)
 - **Authentication**: [JWT (JSON Web Tokens)](https://jwt.io/)
-- **Payments**: [Safaricom M-Pesa API](https://developer.safaricom.co.ke/)
+- **Payments**: [Safaricom M-Pesa API](https://developer.safaricom.co.ke/)(incomplete integration)
 - **File Storage**: [Cloudinary](https://cloudinary.com/)
 - **API Documentation**: [OpenAPI/Swagger](https://swagger.io/)
 
