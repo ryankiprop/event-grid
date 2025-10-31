@@ -16,6 +16,7 @@ from sqlalchemy.orm import lazyload
 from ..models.event import Event
 from ..models.order import Order, OrderItem
 from ..models.user import User
+from ..models.ticket import Ticket  # Import Ticket model directly
 from ..schemas.order_schema import CreateOrderSchema, OrderSchema
 from ..utils.email import send_order_confirmation
 from ..utils.qrcode_util import build_ticket_qr_payload
@@ -66,7 +67,8 @@ def init_app(app):
             db.session.add(order)
             db.session.flush()  # Get order ID
             
-            # Process ticket items
+            # First, create all order items
+            order_items = []
             for item in data.get('items', []):
                 ticket_type_id = item.get('ticket_type_id')
                 quantity = int(item.get('quantity', 1))
@@ -80,20 +82,31 @@ def init_app(app):
                     qr_code=f"FREE-{order.id}-{ticket_type_id}"
                 )
                 db.session.add(order_item)
-                
-                # Create tickets
-                for _ in range(quantity):
-                    ticket = db.session.query(db.Model._decl_class_registry.get('Ticket'))(
-                        order_item_id=order_item.id,
-                        event_id=event_id,
-                        user_id=user_id,
-                        ticket_type_id=ticket_type_id,
-                        status="active",
-                        qr_data=f"FREE-{order.id}-{ticket_type_id}-{uuid4()}"
-                    )
-                    db.session.add(ticket)
+                order_items.append((order_item, ticket_type_id, quantity))
             
-            # Commit all changes
+            # Commit order and order items first
+            db.session.commit()
+            
+            # Now create tickets with the committed order item IDs
+            for order_item, ticket_type_id, quantity in order_items:
+                for _ in range(quantity):
+                    try:
+                        ticket = Ticket(
+                            order_item_id=order_item.id,
+                            event_id=event_id,
+                            user_id=user_id,
+                            ticket_type_id=ticket_type_id,
+                            status="active",
+                            qr_data=f"FREE-{order.id}-{ticket_type_id}-{uuid4()}"
+                        )
+                        db.session.add(ticket)
+                    except Exception as e:
+                        current_app.logger.error(f"Error creating ticket: {str(e)}")
+                        current_app.logger.error(traceback.format_exc())
+                        db.session.rollback()
+                        return {"message": f"Failed to create ticket: {str(e)}"}, 500
+            
+            # Commit tickets
             db.session.commit()
             
             return {
