@@ -161,8 +161,22 @@ def init_app(app):
         if not user_id:
             return jsonify({"message": "Invalid token"}), 400
             
-        orders = Order.query.filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
-        return jsonify({"orders": orders_schema.dump(orders)})
+        from sqlalchemy.orm import joinedload
+        
+        # Query orders with relationships
+        orders = (Order.query
+            .filter_by(user_id=user_id)
+            .options(
+                joinedload(Order.event),
+                joinedload(Order.items).joinedload(OrderItem.ticket_type)
+            )
+            .order_by(Order.created_at.desc())
+            .all())
+            
+        # Use the schema with nested relationships
+        from ..schemas.order_schema import OrderSchema
+        schema = OrderSchema(many=True)
+        return jsonify({"orders": schema.dump(orders)})
 
     @app.route('/api/orders/<order_id>', methods=['GET'])
     @jwt_required()
