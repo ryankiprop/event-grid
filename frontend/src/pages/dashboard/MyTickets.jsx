@@ -1,6 +1,19 @@
 import { useEffect, useState } from 'react'
 import { getMyOrders } from '../../services/orders'
 import QRCode from 'react-qr-code'
+
+// Format date as 'MMM d, yyyy'
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
 import { format } from 'date-fns'
 
 export default function MyTickets () {
@@ -26,14 +39,16 @@ export default function MyTickets () {
           <li key={o.id} className='border rounded p-4 bg-white'>
             <div className='flex items-center justify-between'>
               <div>
-                <div className='text-sm text-gray-600'>Order #{o.id.slice(0, 8)}</div>
-                <div className='font-medium'>{o.event?.title || 'Event'}</div>
-                <div className='text-xs text-gray-500'>
-                  {o.event?.start_date ? format(new Date(o.event.start_date), 'MMM d, yyyy') : ''}
-                  {o.event?.venue_name ? ` • ${o.event.venue_name}` : ''}
+                <div className='text-sm text-gray-600'>Order #{o.id?.slice(0, 8) || 'N/A'}</div>
+                <div className='font-medium text-lg'>{o.event?.title || 'Event'}</div>
+                <div className='text-sm text-gray-700 mt-1'>
+                  {o.event?.venue_name || 'Venue not specified'}
                 </div>
-                <div className='text-xs text-gray-500'>
-                  Ordered on {new Date(o.created_at).toLocaleDateString()}
+                <div className='text-xs text-gray-500 mt-1'>
+                  {o.event?.start_date ? formatDate(o.event.start_date) : 'Date not specified'}
+                </div>
+                <div className='text-xs text-gray-500 mt-1'>
+                  Ordered on {o.created_at ? formatDate(o.created_at) : 'N/A'}
                 </div>
               </div>
               <div className='text-sm px-2 py-1 rounded bg-green-50 text-green-700 border border-green-200'>{o.status}</div>
@@ -41,13 +56,36 @@ export default function MyTickets () {
             <div className='mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4'>
               {(o.items || []).map((it, idx) => (
                 <div key={it.id || idx} className='border rounded p-3 flex flex-col items-center'>
-                  <div className='text-sm font-medium mb-1'>{it.ticket_type_name || 'General Admission'}</div>
-                  <div className='bg-white p-2 mb-2'>
-                    <QRCode value={it.qr_code || ''} size={100} />
-                  </div>
-                  <div className='text-xs text-gray-500 break-all'>{it.qr_code}</div>
-                  <div className='mt-1 text-xs'>
-                    Qty: {it.quantity} • KES {(it.unit_price || 0).toFixed(2)}
+                  <div className='w-full'>
+                    <div className='text-sm font-medium mb-2 text-center'>
+                      {it.ticket_type?.name || 'General Admission'}
+                    </div>
+                    <div className='flex justify-center bg-white p-2 mb-2 border rounded'>
+                      <QRCode 
+                        value={it.qr_code || ''} 
+                        size={120} 
+                        level='M' 
+                        includeMargin={false}
+                      />
+                    </div>
+                    <div className='text-xs text-gray-600 text-center mb-1'>
+                      {o.event?.title}
+                    </div>
+                    <div className='text-xs text-gray-500 text-center'>
+                      {o.event?.venue_name}
+                    </div>
+                    <div className='text-xs text-gray-500 text-center mt-1'>
+                      {o.event?.start_date ? formatDate(o.event.start_date) : ''}
+                    </div>
+                    <div className='mt-2 text-xs text-center'>
+                      <span className='font-medium'>Qty:</span> {it.quantity} • 
+                      <span className='font-medium'>KES</span> {(it.unit_price || 0).toFixed(2)}
+                    </div>
+                    {it.qr_code && (
+                      <div className='mt-1 text-[10px] text-gray-400 text-center break-all'>
+                        {it.qr_code}
+                      </div>
+                    )}
                   </div>
                   {it.checked_in && (
                     <div className='mt-2 text-xs text-green-700'>Checked in at {it.checked_in_at ? new Date(it.checked_in_at).toLocaleString() : ''}</div>
