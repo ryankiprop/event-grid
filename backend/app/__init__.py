@@ -52,27 +52,25 @@ def create_app():
         headers_enabled=True
     )
     
-    # Simple CORS configuration - handle everything in one place
+    # CORS configuration to allow all origins for development
     @app.after_request
     def add_cors_headers(response):
-        allowed_origins = [
-            'https://event-grid-gilt.vercel.app',
-            'http://localhost:3000'
-        ]
+        # Allow all origins
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, X-Free-Mode'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Range, X-Total-Count'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
         
-        origin = request.headers.get('Origin')
-        if origin in allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-            response.headers['Access-Control-Expose-Headers'] = 'Content-Range, X-Total-Count'
-            
-            # Security headers
-            response.headers['X-Content-Type-Options'] = 'nosniff'
-            response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-            response.headers['X-XSS-Protection'] = '1; mode=block'
-            response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # Security headers (commented out for development)
+        # response.headers['X-Content-Type-Options'] = 'nosniff'
+        # response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        # response.headers['X-XSS-Protection'] = '1; mode=block'
+        # response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
+        # Handle preflight requests
+        if request.method == 'OPTIONS':
+            response.status_code = 200
         
         return response
     
