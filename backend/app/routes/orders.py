@@ -43,224 +43,70 @@ def init_app(app):
     @jwt_required()
     def create_order():
         try:
-            current_app.logger.info("Received order creation request")
-            raw = request.get_json(silent=True) or {}
-            current_app.logger.info(f"Request data: {raw}")
-
-            # In free mode, we allow direct order creation without payment
-            if not is_free_mode():
-                return {
-                    "message": "Direct checkout is disabled. Use /api/payments/mpesa/initiate."
-                }, 400
-            json_data = raw
-            current_app.logger.info(f"Validating order data: {json_data}")
-            errors = create_order_schema.validate(json_data)
-            if errors:
-                current_app.logger.error(f"Validation errors: {errors}")
-                return {"message": "Invalid order data", "errors": errors}, 400
-            user_id = _uuid(get_jwt_identity())
-            if not user_id:
-                current_app.logger.error("Invalid user ID from token")
-                return {"message": "Invalid token"}, 400
-                
-            event_id = _uuid(json_data.get("event_id"))
+            # Get request data
+            data = request.get_json() or {}
+            user_id = get_jwt_identity()
+            event_id = data.get('event_id')
+            
+            # Basic validation
             if not event_id:
-                current_app.logger.error(f"Invalid event ID: {json_data.get('event_id')}")
-                return {"message": "Invalid event id"}, 400
+                return {"message": "Event ID is required"}, 400
                 
-            current_app.logger.info(f"Looking up event with ID: {event_id}")
-            event = Event.query.get(event_id)
-            if not event:
-                current_app.logger.error(f"Event not found: {event_id}")
-                return {"message": "Event not found"}, 404
-            current_app.logger.info(f"Creating order for user {user_id}, event {event_id}")
-            # Build order with appropriate status based on free mode
-            order_status = "paid" if is_free_mode() else "pending"
+            if not data.get('items'):
+                return {"message": "No items provided. Add at least one ticket."}, 400
+                
+            # Create order
             order = Order(
-                user_id=user_id, 
-                event_id=event.id, 
-                total_amount=0, 
-                status=order_status,
-                payment_method="free" if is_free_mode() else None
+                user_id=user_id,
+                event_id=event_id,
+                total_amount=0,
+                status="paid",
+                payment_method="free"
             )
             db.session.add(order)
-            try:
-                db.session.flush()  # get order.id
-                current_app.logger.info(f"Created order with ID: {order.id}")
-            except Exception as e:
-                db.session.rollback()
-                current_app.logger.error(f"Failed to create order: {str(e)}")
-                current_app.logger.error(traceback.format_exc())
-                return {"message": "Failed to create order", "error": str(e)}, 500
-            total = 0
-            # Validate and reserve tickets
-            items_in = json_data.get("items", [])
-            current_app.logger.info(f"Processing {len(items_in)} ticket items")
-            if not items_in:
-                current_app.logger.error("No items provided in order")
-                return {"message": "No items provided. Add at least one ticket."}, 400
-
-            item_errors = []
-            for idx, item in enumerate(items_in):
-                try:
-                    tt_id_str = item.get("ticket_type_id")
-                    current_app.logger.info(f"Processing item {idx}: ticket_type_id={tt_id_str}")
-                    
-                    tt_id = _uuid(tt_id_str)
-                    qty = int(item.get("quantity") or 0)
-                    
-                    if not tt_id or qty <= 0:
-                        error_msg = f"Invalid ticket item at index {idx}: ticket_type_id={tt_id_str}, quantity={qty}"
-                        current_app.logger.error(error_msg)
-                        item_errors.append({"index": idx, "message": "Invalid ticket item (ticket_type_id and positive quantity required)"})
-                        continue
-                        
-                    current_app.logger.info(f"Looking up ticket type: {tt_id}")
-                    tt = TicketType.query.get(tt_id)
-                    
-                    if not tt:
-                        error_msg = f"Ticket type not found: {tt_id}"
-                        current_app.logger.error(error_msg)
-                        item_errors.append({"index": idx, "message": "Ticket type not found"})
-                        continue
-                        
-                    if tt.event_id != event.id:
-                        error_msg = f"Ticket type {tt_id} does not belong to event {event.id}"
-                        current_app.logger.error(error_msg)
-                        item_errors.append({"index": idx, "message": "Ticket type not found for event"})
-                        continue
-                        
-                    available = tt.quantity_available - (tt.quantity_sold or 0)
-                    current_app.logger.info(f"Ticket type {tt_id} - Available: {available}, Requested: {qty}")
-                    
-                    if available < qty:
-                        error_msg = f"Insufficient availability for {tt.name}: {available} available, {qty} requested"
-                        current_app.logger.error(error_msg)
-                        item_errors.append({"index": idx, "message": f"Insufficient availability for {tt.name}"})
-                        continue
-                        
-                except Exception as e:
-                    error_msg = f"Error processing ticket item {idx}: {str(e)}"
-                    current_app.logger.error(error_msg)
-                    current_app.logger.error(traceback.format_exc())
-                    item_errors.append({"index": idx, "message": f"Error processing ticket: {str(e)}"})
-                    continue
-                try:
-                    line_total = tt.price * qty
-                    total += line_total
-                    current_app.logger.info(f"Creating order item: ticket_type_id={tt.id}, quantity={qty}, price={tt.price}")
-                    
-                    oi = OrderItem(
-                        order_id=order.id,
-                        ticket_type_id=tt.id,
-                        quantity=qty,
-                        unit_price=tt.price,
-                    )
-                    db.session.add(oi)
-                    db.session.flush()  # get oi.id
-                    
-                    current_app.logger.info(f"Order item created with ID: {oi.id}")
-                    
-                    # Build QR code payload
-                    qr_payload = build_ticket_qr_payload(
-                        order_id=order.id,
-                        item_id=oi.id,
-                        user_id=user_id,
-                        event_id=event.id,
-                        event_title=event.title,
-                        event_start_date_iso=(event.start_date.isoformat() if getattr(event, "start_date", None) else None),
-                        ticket_type_id=tt.id,
-                        ticket_type_name=tt.name,
-                    )
-                    oi.qr_code = qr_payload
-                    
-                    # Import Ticket model here to avoid circular imports
-                    from ..models.ticket import Ticket
+            db.session.flush()  # Get order ID
             
-                    # Create tickets for each order item
-                    for item in order.items:
-                        try:
-                            # Get ticket type to check availability
-                            ticket_type = db.session.query(TicketType).get(item.ticket_type_id)
-                            if not ticket_type:
-                                raise ValueError(f"Ticket type {item.ticket_type_id} not found")
-                                
-                            # Create tickets for the quantity ordered
-                            for _ in range(item.quantity):
-                                ticket = Ticket(
-                                    order_item_id=item.id,
-                                    event_id=event.id,
-                                    user_id=user_id,
-                                    ticket_type_id=item.ticket_type_id,
-                                    status="active" if is_free_mode() else "pending_payment",
-                                    qr_data=build_ticket_qr_payload(
-                                        order_id=str(order.id),
-                                        event_id=str(event.id),
-                                        ticket_type_id=str(item.ticket_type_id),
-                                        user_id=str(user_id)
-                                    )
-                                )
-                                db.session.add(ticket)
-                                
-                        except Exception as e:
-                            db.session.rollback()
-                            current_app.logger.error(f"Error creating ticket: {str(e)}")
-                            current_app.logger.error(traceback.format_exc())
-                            raise
-                            
-                    # Update quantity sold
-                    tt.quantity_sold = (tt.quantity_sold or 0) + qty
-                    current_app.logger.info(f"Updated quantity sold for ticket type {tt.id}: {tt.quantity_sold}")
+            # Process ticket items
+            for item in data.get('items', []):
+                ticket_type_id = item.get('ticket_type_id')
+                quantity = int(item.get('quantity', 1))
+                
+                # Create order item
+                order_item = OrderItem(
+                    order_id=order.id,
+                    ticket_type_id=ticket_type_id,
+                    quantity=quantity,
+                    unit_price=0,  # Free mode
+                    qr_code=f"FREE-{order.id}-{ticket_type_id}"
+                )
+                db.session.add(order_item)
+                
+                # Create tickets
+                for _ in range(quantity):
+                    ticket = db.session.query(db.Model._decl_class_registry.get('Ticket'))(
+                        order_item_id=order_item.id,
+                        event_id=event_id,
+                        user_id=user_id,
+                        ticket_type_id=ticket_type_id,
+                        status="active",
+                        qr_data=f"FREE-{order.id}-{ticket_type_id}-{uuid4()}"
+                    )
+                    db.session.add(ticket)
+            
+            # Commit all changes
+            db.session.commit()
+            
+            return {
+                "id": str(order.id),
+                "status": order.status,
+                "message": "Order created successfully"
+            }, 201
                     
-                except Exception as e:
-                    db.session.rollback()
-                    error_msg = f"Failed to create order item: {str(e)}"
-                    current_app.logger.error(error_msg)
-                    current_app.logger.error(traceback.format_exc())
-                    item_errors.append({"index": idx, "message": f"Failed to process ticket: {str(e)}"})
-
-            if item_errors:
-                db.session.rollback()
-                current_app.logger.error(f"Order processing failed with {len(item_errors)} errors")
-                return {"message": "Failed to process order", "errors": item_errors}, 400
-
-            # Update order total and commit
-            order.total_amount = total
-            try:
-                current_app.logger.info(f"Committing order with total: {total}")
-                db.session.commit()
-                current_app.logger.info(f"Order {order.id} created successfully")
-                
-                # Send confirmation email (best-effort)
-                try:
-                    user = User.query.get(user_id)
-                    if user and user.email:
-                        send_order_confirmation(user.email, order, event)
-                except Exception as e:
-                    current_app.logger.error(f"Failed to send confirmation email: {str(e)}")
-                    current_app.logger.error(traceback.format_exc())
-
-                # Add free mode info to response
-                response = order_schema.dump(order)
-                if is_free_mode():
-                    response["free_mode"] = True
-                    response["message"] = "Order created successfully in free mode"
-
-                return response, 201
-                
-            except Exception as e:
-                db.session.rollback()
-                error_msg = f"Failed to commit order: {str(e)}"
-                current_app.logger.error(error_msg)
-                current_app.logger.error(traceback.format_exc())
-                return {"message": "Failed to process order", "error": str(e)}, 500
-                
         except Exception as e:
             db.session.rollback()
-            error_msg = f"Unexpected error in create_order: {str(e)}"
-            current_app.logger.error(error_msg)
+            current_app.logger.error(f"Error creating order: {str(e)}")
             current_app.logger.error(traceback.format_exc())
-            return {"message": "An unexpected error occurred", "error": str(e)}, 500
+            return {"message": "Failed to create order", "error": str(e)}, 500
 
     @app.route('/api/orders/user', methods=['GET'])
     @jwt_required()
