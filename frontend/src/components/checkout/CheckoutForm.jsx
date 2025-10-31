@@ -10,22 +10,21 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if we're in free mode (for demo purposes)
-    const checkFreeMode = async () => {
+    // Always enable free mode
+    const enableFreeMode = () => {
       try {
-        // In a real app, you might want to fetch this from an API endpoint
-        const freeMode = localStorage.getItem('freeMode') === 'true' || 
-                        import.meta.env.VITE_FREE_MODE === 'true';
-        setIsFreeMode(freeMode);
+        localStorage.setItem('freeMode', 'true');
+        setIsFreeMode(true);
       } catch (error) {
-        console.error('Error checking free mode:', error);
+        console.error('Error enabling free mode:', error);
+        setIsFreeMode(true); // Default to free mode even if localStorage fails
       }
     };
 
-    checkFreeMode();
+    enableFreeMode();
   }, []);
 
-  const handleCheckout = async () => {
+    const handleCheckout = async () => {
     if (!cart || cart.length === 0) {
       toast.error('Please select at least one ticket');
       return;
@@ -45,21 +44,19 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
         items: cart.map(item => ({
           ticket_type_id: item.ticket_type_id || item.id,
           quantity: parseInt(item.quantity) || 1,
-          price: item.price || 0
+          price: 0 // Force price to 0 in free mode
         })).filter(item => item.ticket_type_id)
       };
 
-      if (isFreeMode) {
-        // In free mode, create the order directly
-        const response = await createOrder(orderData);
-        console.log('Free order created:', response);
-        
-        toast.success('🎉 Tickets booked successfully! (Free Mode)');
-        setTimeout(() => {
-          navigate('/dashboard/tickets');
-        }, 1500);
-        return;
-      }
+      // Always use free mode
+      const response = await createOrder(orderData);
+      console.log('Order created in free mode:', response);
+      
+      toast.success('🎉 Tickets booked successfully!');
+      setTimeout(() => {
+        navigate('/dashboard/tickets');
+      }, 1500);
+      return;
 
       // In production mode, process payment
       try {

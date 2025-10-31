@@ -13,6 +13,8 @@ api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token')
     if (token) config.headers.Authorization = `Bearer ${token}`
   }
+  // Always include X-Free-Mode header for all requests
+  config.headers['X-Free-Mode'] = 'true'
   return config
 })
 
