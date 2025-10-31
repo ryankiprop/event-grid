@@ -109,12 +109,45 @@ def init_app(app):
             # Commit tickets
             db.session.commit()
             
-            return {
+            # Fetch the complete order with relationships
+            from sqlalchemy.orm import joinedload
+            
+            # Query the order with all necessary relationships
+            order_with_details = db.session.query(Order)\
+                .options(
+                    joinedload(Order.event),
+                    joinedload(Order.items).joinedload(OrderItem.ticket_type)
+                )\
+                .filter(Order.id == order.id)\
+                .first()
+            
+            # Format the response
+            response = {
                 "id": str(order.id),
-                "status": order.status,
-                "message": "Order created successfully"
-            }, 201
-                    
+                "message": "Order created successfully",
+                "status": "paid",
+                "event": {
+                    "id": str(order_with_details.event.id),
+                    "title": order_with_details.event.title,
+                    "start_date": order_with_details.event.start_date.isoformat(),
+                    "end_date": order_with_details.event.end_date.isoformat(),
+                    "venue_name": order_with_details.event.venue_name,
+                    "address": order_with_details.event.address
+                },
+                "items": [
+                    {
+                        "id": str(item.id),
+                        "ticket_type_id": str(item.ticket_type_id),
+                        "ticket_type_name": item.ticket_type.name if item.ticket_type else "General Admission",
+                        "quantity": item.quantity,
+                        "unit_price": float(item.unit_price),
+                        "qr_code": item.qr_code
+                    }
+                    for item in order_with_details.items
+                ]
+            }
+            
+            return response, 201       
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Error creating order: {str(e)}")

@@ -48,15 +48,32 @@ const CheckoutForm = ({ cart, total, onSuccess }) => {
         })).filter(item => item.ticket_type_id)
       };
 
-      // Always use free mode
-      const response = await createOrder(orderData);
-      console.log('Order created in free mode:', response);
-      
-      toast.success('🎉 Tickets booked successfully!');
-      setTimeout(() => {
-        navigate('/dashboard/tickets');
-      }, 1500);
-      return;
+      try {
+        const response = await createOrder(orderData);
+        console.log('Order created in free mode:', response);
+        
+        toast.success('🎉 Tickets booked successfully!');
+        
+        // Redirect to the tickets page after a short delay
+        setTimeout(() => {
+          navigate('/dashboard/tickets');
+        }, 1500);
+        
+        // Call the onSuccess callback if provided (for any parent components)
+        if (onSuccess) {
+          onSuccess({
+            orderId: response.id,
+            event: response.event,
+            items: response.items
+          });
+        }
+        
+        return response;
+      } catch (error) {
+        console.error('Order creation failed:', error);
+        toast.error(error.response?.data?.message || 'Failed to create order');
+        throw error;
+      }
 
       // In production mode, process payment
       try {
