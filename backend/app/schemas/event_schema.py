@@ -37,5 +37,5 @@ class EventUpdateSchema(Schema):
     address = fields.Str(allow_none=True)
     start_date = fields.DateTime()
     end_date = fields.DateTime()
-    banner_image_url = fields.Url(allow_none=True)
+    banner_image_url = fields.Str(allow_none=True)  # Changed from Url to Str to allow empty strings
     is_published = fields.Bool()
