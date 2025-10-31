@@ -18,6 +18,7 @@ class Order(db.Model):
     )
     total_amount = db.Column(db.Integer, nullable=False, default=0)  # in cents
     status = db.Column(db.String(20), nullable=False, default="paid")
+    payment_method = db.Column(db.String(20), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User", backref=db.backref("orders", lazy=True))
