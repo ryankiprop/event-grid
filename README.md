@@ -13,21 +13,20 @@ Explore our live demo:
 
 ### Test Credentials
 - **Admin Account**:
-  - Email: admin@example.com
-  - Password: admin123
+  - Email: admin@eventgrid.com
+  - Password: Admin@123
 - **Organizer Account**:
-  - Email: organizer@example.com
-  - Password: organizer123
+  - Email: organizer@eventgrid.com
+  - Password: Organizer@123
 - **User Account**:
-  - Email: user@example.com
-  - Password: user123
+  - Email: user1@eventgrid.com
+  - Password: User@123
 
 ##  Features
 
 - **User Authentication** - Secure JWT-based authentication system
 - **Event Management** - Create, update, and manage events with rich details
 - **Ticket Types** - Multiple ticket types with customizable pricing and quantities
-- **Secure Payments** - Integrated payment processing (M-Pesa)
 - **QR Code Check-in** - Mobile-friendly check-in system for event organizers
 - **Dashboard** - Real-time analytics and management for organizers
 - **Responsive Design** - Works on desktop and mobile devices
@@ -39,7 +38,7 @@ Explore our live demo:
 - **Framework**: [Python Flask](https://flask.palletsprojects.com/)
 - **Database**: [PostgreSQL](https://www.postgresql.org/) with [SQLAlchemy ORM](https://www.sqlalchemy.org/)
 - **Authentication**: [JWT (JSON Web Tokens)](https://jwt.io/)
-- **Payments**: [Safaricom M-Pesa API](https://developer.safaricom.co.ke/)
+- **Payments**: [Safaricom M-Pesa API](https://developer.safaricom.co.ke/)(incomplete integration)
 - **File Storage**: [Cloudinary](https://cloudinary.com/)
 - **API Documentation**: [OpenAPI/Swagger](https://swagger.io/)
 
@@ -56,11 +55,9 @@ Explore our live demo:
 ## Prerequisites
 
 - Python 3.8+
-- Node.js 16+
 - PostgreSQL 12+
 - Redis (for caching and background tasks)
 - Cloudinary account (for file storage)
-- M-Pesa API credentials (for payments)
 
 ## Getting Started
 
@@ -141,10 +138,10 @@ JWT_SECRET_KEY=your-jwt-secret
 CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=your-api-key
 CLOUDINARY_API_SECRET=your-api-secret
-MPESA_CONSUMER_KEY=your-mpesa-key
-MPESA_CONSUMER_SECRET=your-mpesa-secret
-MPESA_PASSKEY=your-mpesa-passkey
-MPESA_SHORTCODE=your-shortcode
+#MPESA_CONSUMER_KEY=your-mpesa-key
+#MPESA_CONSUMER_SECRET=your-mpesa-secret
+#MPESA_PASSKEY=your-mpesa-passkey
+#MPESA_SHORTCODE=your-shortcode
 ```
 
 ### Frontend (`.env`)
@@ -152,20 +149,6 @@ MPESA_SHORTCODE=your-shortcode
 REACT_APP_API_URL=http://localhost:5000/api
 REACT_APP_WS_URL=ws://localhost:5000
 ```
-
-## Running Tests
-
-### Backend Tests
-```bash
-pytest tests/
-```
-
-### Frontend Tests
-```bash
-cd frontend
-npm test
-```
-
 ## Contributing
 
 1. Fork the repository
@@ -191,7 +174,7 @@ This project was made possible thanks to these amazing open-source projects:
 - [React Router](https://reactrouter.com/) - Declarative routing for React
 - [Axios](https://axios-http.com/) - Promise based HTTP client
 - [Lucide Icons](https://lucide.dev/) - Beautiful & consistent icon toolkit
-- [M-Pesa API](https://developer.safaricom.co.ke/) - Mobile Payment Integration
+- [M-Pesa API](https://developer.safaricom.co.ke/) - Mobile Payment Integration(incomplete)
 - [Cloudinary](https://cloudinary.com/) - Cloud-based image and video management
 - [PostgreSQL](https://www.postgresql.org/) - The World's Most Advanced Open Source Relational Database
 - [SQLAlchemy](https://www.sqlalchemy.org/) - The Database Toolkit for Python
