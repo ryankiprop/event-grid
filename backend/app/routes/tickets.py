@@ -83,7 +83,7 @@ def init_app(app):
             name=data["name"],
             description=data.get("description", ""),
             price=data["price"],
-            quantity_available=data.get("quantity_available"),
+            quantity_total=data["quantity_total"],
             event_id=eid,
             min_per_order=data.get("min_per_order", 1),
             max_per_order=data.get("max_per_order", 10),
