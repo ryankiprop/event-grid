@@ -71,14 +71,33 @@ export function AuthProvider ({ children }) {
     navigate('/')
   }
 
-  const registerOrganizer = async (values) => {
-    const res = await registerOrganizerRequest(values)
-    setToken(res.token)
-    setUser(res.user)
-    localStorage.setItem('token', res.token)
-    localStorage.setItem('user', JSON.stringify(res.user))
-    setAuthToken(res.token)
-    navigate('/create-event')
+  const registerOrganizer = async (values, { setSubmitting, setFieldError }) => {
+    try {
+      const res = await registerOrganizerRequest(values)
+      if (res.errors) {
+        // Handle validation errors
+        Object.entries(res.errors).forEach(([field, message]) => {
+          setFieldError(field, Array.isArray(message) ? message[0] : message)
+        })
+        return
+      }
+      
+      if (res.token && res.user) {
+        setToken(res.token)
+        setUser(res.user)
+        localStorage.setItem('token', res.token)
+        localStorage.setItem('user', JSON.stringify(res.user))
+        setAuthToken(res.token)
+        navigate('/create-event')
+      } else {
+        throw new Error('Invalid response from server')
+      }
+    } catch (error) {
+      console.error('Registration failed:', error)
+      setFieldError('form', error.response?.data?.message || 'Registration failed. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const logout = () => {
