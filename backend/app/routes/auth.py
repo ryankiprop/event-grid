@@ -124,9 +124,7 @@ def init_app(app):
         db.session.commit()
         return jsonify(user_schema.dump(user))
 
-    @app.route('/api/auth/register/organizer', methods=['POST'])
-    @jwt_required()
-    @role_required(['admin'])
+    @app.route('/api/auth/register-organizer', methods=['POST'])
     def register_organizer():
         data = request.get_json() or {}
         errors = user_create_schema.validate(data)
@@ -147,12 +145,18 @@ def init_app(app):
         db.session.add(user)
         db.session.commit()
 
+        # Create access token for the new user
+        access_token = create_access_token(identity=str(user.id), additional_claims={"role": user.role})
+        
         # Send welcome email (fire and forget)
         try:
             send_welcome_email(user, is_organizer=True)
         except Exception as e:
             current_app.logger.error(f"Failed to send welcome email: {str(e)}")
 
-        return jsonify(user_schema.dump(user)), 201
+        return jsonify({
+            "token": access_token,
+            "user": user_schema.dump(user)
+        }), 201
 
     return app
