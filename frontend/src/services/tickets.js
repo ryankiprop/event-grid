@@ -13,15 +13,11 @@ export const getEventTickets = async (eventId) => {
 }
 
 export const createTicketType = async (eventId, data) => {
-  // Include required fields and convert price to cents
+  // Only include fields defined in TicketTypeCreateSchema
   const ticketData = {
     name: data.name,
-    description: data.description || '',
     price: Math.round(parseFloat(data.price || 0) * 100), // Convert to cents
-    quantity_total: parseInt(data.quantity_total) || 0,
-    min_per_order: 1,
-    max_per_order: 10,
-    is_active: true
+    quantity_total: parseInt(data.quantity_total) || 0
   };
   
   const res = await api.post(`/events/${eventId}/tickets`, ticketData);
