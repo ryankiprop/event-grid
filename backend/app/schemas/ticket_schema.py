@@ -14,8 +14,14 @@ class TicketTypeSchema(Schema):
 
 class TicketTypeCreateSchema(Schema):
     name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
-    price = fields.Int(required=True)
-    quantity_total = fields.Int(required=True)
+    description = fields.Str(required=False, allow_none=True, default='')
+    price = fields.Int(required=True, validate=validate.Range(min=0))
+    quantity_total = fields.Int(required=True, validate=validate.Range(min=0))
+    min_per_order = fields.Int(required=False, default=1, validate=validate.Range(min=1))
+    max_per_order = fields.Int(required=False, default=10, validate=validate.Range(min=1))
+    sale_start_date = fields.DateTime(required=False, allow_none=True)
+    sale_end_date = fields.DateTime(required=False, allow_none=True)
+    is_active = fields.Boolean(required=False, default=True)
 
 
 class TicketTypeUpdateSchema(Schema):

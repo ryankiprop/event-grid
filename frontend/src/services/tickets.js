@@ -13,11 +13,17 @@ export const getEventTickets = async (eventId) => {
 }
 
 export const createTicketType = async (eventId, data) => {
-  // Only include fields defined in TicketTypeCreateSchema
+  // Map frontend form fields to backend fields
   const ticketData = {
-    name: data.name,
-    price: Math.round(parseFloat(data.price || 0) * 100), // Convert to cents
-    quantity_total: parseInt(data.quantity_total) || 0
+    name: data.name || 'General Admission',
+    description: data.description || '',
+    // If 'type' is used for price tier, map it to price
+    price: data.type === 'vip' ? 10000 : 5000, // Example: VIP = $100.00, Regular = $50.00
+    quantity_total: parseInt(data.quantity_available) || 100,
+    // Set reasonable defaults for required fields
+    min_per_order: 1,
+    max_per_order: 10,
+    is_active: true
   };
   
   const res = await api.post(`/events/${eventId}/tickets`, ticketData);
