@@ -34,7 +34,7 @@ const TicketTypesManager = ({ eventId, initialTicketTypes = [] }) => {
     try {
       if (editingId) {
         // Update existing ticket type
-        const updated = await updateTicketType(editingId, formData);
+        const updated = await updateTicketType(eventId, editingId, formData);
         setTicketTypes(ticketTypes.map(t => t.id === editingId ? updated : t));
         setEditingId(null);
       } else {
