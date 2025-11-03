@@ -23,18 +23,18 @@ export const createTicketType = async (eventId, data) => {
   return res.data;
 }
 
-export const updateTicketType = async (ticketId, data) => {
+export const updateTicketType = async (eventId, ticketId, data) => {
   // Convert price to cents before sending to the server
   const ticketData = {
     ...data,
     price: Math.round(parseFloat(data.price || 0) * 100) // Convert to cents
   };
   
-  const res = await api.put(`/tickets/${ticketId}`, ticketData);
+  const res = await api.put(`/events/${eventId}/tickets/${ticketId}`, ticketData);
   return res.data;
 }
 
-export const deleteTicketType = async (ticketId) => {
-  const res = await api.delete(`/tickets/${ticketId}`);
+export const deleteTicketType = async (eventId, ticketId) => {
+  const res = await api.delete(`/events/${eventId}/tickets/${ticketId}`);
   return res.data;
 }
