@@ -128,7 +128,7 @@ def init_app(app):
             return jsonify({"errors": errors}), 400
             
         # Update ticket
-        for field in ["name", "description", "price", "quantity_available", 
+        for field in ["name", "description", "price", "quantity_total", 
                      "min_per_order", "max_per_order", "sale_start_date", 
                      "sale_end_date", "is_active"]:
             if field in data:
